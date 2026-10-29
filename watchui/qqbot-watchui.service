@@ -1,0 +1,17 @@
+[Unit]
+Description=Bili Watch UI (大肥鱼打分台)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/bili-watch-ui
+Environment=WATCHUI_DATA=/opt/astrbot/data/bili_whale
+Environment=WATCHUI_TOKEN_FILE=/opt/bili-watch-ui/token.txt
+Environment=WATCHUI_HOST=127.0.0.1
+Environment=WATCHUI_PORT=18900
+ExecStart=/usr/bin/python3 /opt/bili-watch-ui/watchui.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

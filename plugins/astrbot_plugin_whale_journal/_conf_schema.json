@@ -1,0 +1,95 @@
+{
+  "enable": {
+    "description": "启用自动写日记",
+    "type": "bool",
+    "default": true,
+    "hint": "关掉后仍可用 /写日记、/日记 手动操作"
+  },
+  "owner_qq": {
+    "description": "主人 QQ（可选推送用）",
+    "type": "string",
+    "default": "",
+    "hint": "填了并且开启 push_daily_to_qq 才会把当天日记发到私聊"
+  },
+  "llm_provider_id": {
+    "description": "写日记用的模型",
+    "type": "string",
+    "default": "deepseek/deepseek-flash",
+    "hint": "留空则用 AstrBot 当前默认 provider"
+  },
+  "persona_source": {
+    "type": "string",
+    "default": "astrbot",
+    "options": [
+      "astrbot",
+      "file"
+    ],
+    "description": "人设从哪来：astrbot=跟 AstrBot 面板里当前生效的人格（推荐，改人格不用改插件）；file=只用插件自己的 persona_file"
+  },
+  "persona_id": {
+    "type": "string",
+    "default": "",
+    "description": "指定人格 id（留空 = AstrBot 当前默认人格），一般不用填"
+  },
+  "persona_file": {
+    "description": "人设文件路径",
+    "type": "string",
+    "default": "data/bili_whale/persona.txt",
+    "hint": "必须填<b>文件路径</b>不是人设正文；读不到会退回内置的大肥鱼简介"
+  },
+  "data_dir": {
+    "description": "日记本存放目录",
+    "type": "string",
+    "default": "data/whale_journal"
+  },
+  "chatlog_dir": {
+    "description": "对话记录目录（whale_memory 的 chatlog）",
+    "type": "string",
+    "default": "data/plugin_data/astrbot_plugin_whale_memory/chatlog"
+  },
+  "bili_state": {
+    "description": "B站插件状态文件（读她看过哪些视频）",
+    "type": "string",
+    "default": "data/bili_whale/state.json"
+  },
+  "crons": {
+    "description": "每天写日记的时间点",
+    "type": "list",
+    "default": [
+      "09:30",
+      "13:30",
+      "18:30",
+      "22:30"
+    ],
+    "items": {
+      "type": "string"
+    },
+    "hint": "24 小时制 HH:MM"
+  },
+  "min_messages": {
+    "description": "这段时间至少多少条对话才值得写",
+    "type": "int",
+    "default": 6,
+    "hint": "没刷视频又没聊天就不写，免得写空话"
+  },
+  "max_body_chars": {
+    "description": "单条正文最大字数",
+    "type": "int",
+    "default": 320
+  },
+  "max_chat_lines": {
+    "description": "喂给模型的最多对话条数",
+    "type": "int",
+    "default": 45
+  },
+  "push_daily_to_qq": {
+    "description": "每天把当天日记发一份到主人 QQ",
+    "type": "bool",
+    "default": false
+  },
+  "push_at": {
+    "description": "推送时间（push_daily_to_qq 开启时生效）",
+    "type": "string",
+    "default": "22:35"
+  }
+}

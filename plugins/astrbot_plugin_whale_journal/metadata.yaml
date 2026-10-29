@@ -1,0 +1,6 @@
+name: astrbot_plugin_whale_journal
+display_name: 大肥鱼的日记本
+desc: 让大肥鱼每天自己写日记：把和主人/群友的聊天、在B站看到的东西、被吐槽的地方，写成带心情标签的一小段，落成 md + 网页。
+version: v1.0.0
+author: dafeiyu
+repo: ""

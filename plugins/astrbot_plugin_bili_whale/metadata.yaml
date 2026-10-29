@@ -1,0 +1,6 @@
+name: astrbot_plugin_bili_whale
+display_name: 刷B站的大肥鱼
+desc: 让大肥鱼自己刷B站、写两本日记、在B站评论@主人或私信主人，把细节分享到QQ，并把喜欢的视频转发到群
+version: v1.0.0
+author: dafeiyu
+repo: https://github.com/astrbot-community/astrbot_plugin_bili_whale

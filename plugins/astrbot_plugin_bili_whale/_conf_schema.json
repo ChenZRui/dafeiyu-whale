@@ -1,0 +1,522 @@
+{
+  "enable": {
+    "type": "bool",
+    "description": "启用自动刷B站",
+    "hint": "关掉后只保留 /刷B站 手动命令，不会自己开夜场",
+    "default": true
+  },
+  "owner_qq": {
+    "type": "string",
+    "description": "主人 QQ 号（私聊分享 / 主动汇报都发给它）",
+    "hint": "留空则用 AstrBot 全局配置里的 admins_id[0]",
+    "default": ""
+  },
+  "group_ids": {
+    "type": "list",
+    "description": "要转发视频的 QQ 群号列表",
+    "hint": "留空则不转发到群。支持多个，例如 [\"123456\", \"987654\"]",
+    "default": []
+  },
+  "group_share_enable": {
+    "type": "bool",
+    "description": "把选中的视频转发到群里",
+    "default": true
+  },
+  "share_via": {
+    "type": "string",
+    "description": "在B站怎么把视频告诉主人",
+    "hint": "comment=在视频评论区 @主人；dm=B站私信主人；both=两个都发；off=不在B站通知",
+    "default": "comment"
+  },
+  "owner_bili_mid": {
+    "type": "int",
+    "description": "主人的B站 UID",
+    "default": 0
+  },
+  "self_bili_mid": {
+    "type": "int",
+    "description": "大肥鱼自己的B站 UID（登录号）",
+    "default": 0
+  },
+  "feed_homepage": {
+    "type": "bool",
+    "description": "用B站首页推荐流当选题主源",
+    "hint": "推荐流是按登录账号的观看历史算的，比按时间搜出来的垃圾视频强得多；关掉就只靠关键词搜索",
+    "default": true
+  },
+  "homepage_limit": {
+    "type": "int",
+    "description": "首页推荐一次取多少条",
+    "hint": "5-50，默认 24",
+    "default": 24
+  },
+  "bili_credential_file": {
+    "type": "string",
+    "description": "B站凭证 json 路径",
+    "hint": "文件里要有 sessdata / bili_jct / buvid3 三个字段",
+    "default": "data/bili_whale/credentials.json"
+  },
+  "day_random": {
+    "type": "bool",
+    "description": "一天随机时段刷（推荐）",
+    "hint": "开=每天在 day_window 里随机挑 day_slots_min~day_slots_max 个时刻醒来；关=只跑 night_cron 那一场夜场",
+    "default": true
+  },
+  "plan_cron": {
+    "type": "string",
+    "description": "每天几点生成当天行程",
+    "hint": "cron 5 段，默认每天 05:00 生成当天行程；具体时刻由程序在各时段里随机算",
+    "default": "0 5 * * *"
+  },
+  "day_windows": {
+    "type": "list",
+    "description": "分时段随机：每段抽几次",
+    "hint": "格式 [{\"start\":\"07:00\",\"end\":\"09:00\",\"count\":2}, {\"start\":\"12:00\",\"end\":\"14:00\",\"count\":2}, {\"start\":\"18:00\",\"end\":\"22:00\",\"count\":3}]，每段内随机抽 count 个时刻；留空则退回下面的 day_window 老配置",
+    "default": [
+      {
+        "start": "07:00",
+        "end": "09:00",
+        "count": 2
+      },
+      {
+        "start": "12:00",
+        "end": "14:00",
+        "count": 2
+      },
+      {
+        "start": "18:00",
+        "end": "22:00",
+        "count": 3
+      }
+    ]
+  },
+  "day_window": {
+    "type": "list",
+    "description": "随机时刻允许落在的时间窗口",
+    "hint": "两个字符串，例如 [\"09:00\", \"23:00\"]；不想太早太晚被打扰就缩窗口",
+    "default": [
+      "09:00",
+      "23:00"
+    ]
+  },
+  "day_slots_min": {
+    "type": "int",
+    "description": "每天至少刷几次",
+    "default": 3
+  },
+  "day_slots_max": {
+    "type": "int",
+    "description": "每天最多刷几次",
+    "default": 4
+  },
+  "day_slot_gap_min": {
+    "type": "int",
+    "description": "两次醒来之间至少隔多少分钟",
+    "hint": "避免挤在一起刷屏，默认 90",
+    "default": 90
+  },
+  "night_cron": {
+    "type": "string",
+    "description": "夜场开场时间（cron，5 段）",
+    "hint": "只在 day_random=false 时生效；默认每天 19:00 开一场，夜场里会分几次醒来",
+    "default": "0 19 * * *"
+  },
+  "night_runs": {
+    "type": "int",
+    "description": "一晚上醒来几次",
+    "default": 3
+  },
+  "run_interval_min": {
+    "type": "int",
+    "description": "两次醒来之间隔多少分钟",
+    "default": 35
+  },
+  "run_interval_jitter": {
+    "type": "int",
+    "description": "间隔随机抖动（分钟）",
+    "default": 12
+  },
+  "max_videos": {
+    "type": "int",
+    "description": "每轮最多挑几条视频进候选池",
+    "default": 5
+  },
+  "topic_pool_size": {
+    "type": "int",
+    "description": "交给 LLM 打分的候选条数",
+    "hint": "越大选题越杂（首页与主题搜索各占一半），8-14 比较合适",
+    "default": 10
+  },
+  "deep_read": {
+    "type": "int",
+    "description": "每轮深读几条（读字幕、弹幕、评论）",
+    "default": 2
+  },
+  "min_score": {
+    "type": "int",
+    "description": "打分达到多少才值得分享",
+    "hint": "0-20，越高越挑",
+    "default": 13
+  },
+  "deep_read_only_shared": {
+    "type": "bool",
+    "description": "只深读可能分享的那一条",
+    "default": false
+  },
+  "like_enable": {
+    "type": "bool",
+    "description": "给喜欢的视频点赞",
+    "default": true
+  },
+  "fav_enable": {
+    "type": "bool",
+    "description": "收藏想留的视频",
+    "hint": "只收藏评分达到 fav_min_score 的视频，每轮最多一条",
+    "default": true
+  },
+  "fav_folder_id": {
+    "type": "int",
+    "description": "收藏夹 id（0=默认收藏夹）",
+    "hint": "默认收藏夹就是 0，不用改",
+    "default": 0
+  },
+  "fav_min_score": {
+    "type": "int",
+    "description": "够多少分才收藏",
+    "default": 15
+  },
+  "coin_enable": {
+    "type": "bool",
+    "description": "每天投币",
+    "hint": "每天最多投 coin_daily_max 枚，优先投给主人打星最高的视频（主人没打分就不投，因为她硬币很少）",
+    "default": true
+  },
+  "coin_daily_max": {
+    "type": "int",
+    "description": "每天最多投几枚币",
+    "default": 1
+  },
+  "coin_min_stars": {
+    "type": "int",
+    "description": "至少几星才值得投币",
+    "default": 1
+  },
+  "follow_enable": {
+    "type": "bool",
+    "description": "关注喜欢的 UP 主",
+    "default": false
+  },
+  "keywords": {
+    "type": "list",
+    "description": "搜索关键词（每轮随机抽一个）",
+    "default": [
+      "DeepSeek Harness",
+      "AI 编程",
+      "CS2 道具教学",
+      "猫片",
+      "开源项目"
+    ]
+  },
+  "like_topics": {
+    "type": "list",
+    "description": "喜欢的内容方向（打分时会看）",
+    "default": [
+      "AI工具与插件",
+      "反恐精英CS2道具教学和比赛",
+      "猫片",
+      "github高star开源项目",
+      "各地风景"
+    ]
+  },
+  "dislike_topics": {
+    "type": "list",
+    "description": "讨厌的内容方向（打分时会扣分）",
+    "default": [
+      "带货",
+      "擦边",
+      "标题党",
+      "纯搬运",
+      "鬼畜"
+    ]
+  },
+  "share_daily_quota": {
+    "type": "int",
+    "description": "每天最多在B站分享几条（@ 或私信）",
+    "default": 3
+  },
+  "qq_share_enable": {
+    "type": "bool",
+    "description": "在QQ私聊把细节讲给主人",
+    "default": true
+  },
+  "qq_share_max_chars": {
+    "type": "int",
+    "description": "QQ 分享文案最长字数",
+    "default": 800
+  },
+  "diary_enable": {
+    "type": "bool",
+    "description": "写日记",
+    "default": true
+  },
+  "diary_dir": {
+    "type": "string",
+    "description": "日记存放目录",
+    "default": "data/bili_whale"
+  },
+  "diary_push": {
+    "type": "bool",
+    "description": "把写好的「给他的信」推给主人",
+    "default": true
+  },
+  "comment_digest_enable": {
+    "type": "bool",
+    "description": "扫自己视频/动态下没回的评论，挑重要的回",
+    "default": true
+  },
+  "at_listen_enable": {
+    "type": "bool",
+    "description": "监听B站 @我的消息，在QQ上汇报",
+    "default": true
+  },
+  "dm_listen_enable": {
+    "type": "bool",
+    "description": "监听B站私信，在QQ上汇报",
+    "default": true
+  },
+  "inbox_interval_min": {
+    "type": "int",
+    "description": "收件箱扫描间隔（分钟）",
+    "hint": "每隔多久翻一次 @我的 / 回复我的 / 私信，默认 30；想让她回评论快点可以调到 10",
+    "default": 30
+  },
+  "comment_probability": {
+    "type": "float",
+    "description": "每轮发评论的概率（降频养号）",
+    "hint": "新号每轮都评论太像脚本，B站会把评论折叠成「仅自己可见」。0.45 表示约一半的轮次不评论，只私信+点赞。填 1.0 = 每轮都评论",
+    "default": 0.45
+  },
+  "comment_strip_links": {
+    "type": "bool",
+    "description": "评论里去掉网址",
+    "hint": "评论带链接很容易被判定广告而折叠，私信不受影响（私信照旧带链接）",
+    "default": true
+  },
+  "comment_reply_enable": {
+    "type": "bool",
+    "description": "在B站评论区回别人（@我的、回复我的）",
+    "hint": "总开关。关掉后只汇报到 QQ，不去 B 站回评论",
+    "default": true
+  },
+  "reply_owner": {
+    "type": "bool",
+    "description": "主人在评论区 @ 她 / 回复她时，她回一句",
+    "hint": "主人（owner_bili_mid）的互动一定回，除非这里关掉",
+    "default": true
+  },
+  "reply_stranger": {
+    "type": "bool",
+    "description": "普通网友 @ 她也回一句",
+    "hint": "受 peer_daily_limit 总额度限制，不会刷屏",
+    "default": true
+  },
+  "reply_delay_sec": {
+    "type": "int",
+    "description": "回评论前的随机等待上限（秒）",
+    "hint": "0=立刻回；设 60 就是 0~60 秒里随机等一会儿再回，像人",
+    "default": 0
+  },
+  "peer_enable": {
+    "type": "bool",
+    "description": "认「别的鱼」并和它聊天",
+    "hint": "判断对方是不是别人家养的同类 bot，是的话在评论区唠两句（有轮数上限）",
+    "default": true
+  },
+  "peer_keywords": {
+    "type": "list",
+    "description": "同类识别关键词（昵称或发言里出现即视为同类）",
+    "hint": "默认 [\"大肥鱼\",\"肥鱼\",\"鲸鱼\",\"小鲸鱼\",\"whale\"]；没命中的会交给模型复核",
+    "default": [
+      "大肥鱼",
+      "肥鱼",
+      "鲸鱼",
+      "小鲸鱼",
+      "whale"
+    ]
+  },
+  "peer_llm_judge": {
+    "type": "bool",
+    "description": "关键词没命中时，让模型判断对方是不是同类",
+    "hint": "会多花一次 LLM 调用，只在可疑账号上用",
+    "default": true
+  },
+  "peer_daily_limit": {
+    "type": "int",
+    "description": "每天最多在评论区回几条（含回网友/别的鱼）",
+    "hint": "主人的 @ 不计入这个额度",
+    "default": 6
+  },
+  "peer_thread_max_turns": {
+    "type": "int",
+    "description": "同一条楼层最多来回几轮",
+    "hint": "防止两只 bot 无限互回；到数就收尾",
+    "default": 6
+  },
+  "peer_proactive": {
+    "type": "bool",
+    "description": "允许她主动去别的鱼的地盘搭话",
+    "hint": "默认关。开了会主动找别的鱼的评论去聊，风险自负",
+    "default": false
+  },
+  "dm_auto_reply": {
+    "type": "bool",
+    "description": "私信双向：主人发 B站私信给她，她自动回",
+    "hint": "关掉就只把私信汇报到 QQ，不回话",
+    "default": true
+  },
+  "dm_reply_stranger": {
+    "type": "bool",
+    "description": "陌生人的 B站私信也回",
+    "hint": "默认关。开着可能被陌生人刷屏",
+    "default": false
+  },
+  "dm_reply_delay_sec": {
+    "type": "int",
+    "description": "回私信前随机等几秒（0-300）",
+    "default": 0
+  },
+  "dm_max_per_tick": {
+    "type": "int",
+    "description": "每次扫收件箱最多回几条私信",
+    "default": 3
+  },
+  "dm_context_turns": {
+    "type": "int",
+    "description": "回私信时带几轮上下文",
+    "default": 6
+  },
+  "watch_page_enable": {
+    "type": "bool",
+    "description": "生成「她看过什么」网页（含主人评分）",
+    "default": true
+  },
+  "watch_page_name": {
+    "type": "string",
+    "description": "网页文件名",
+    "default": "watch.html"
+  },
+  "watch_page_limit": {
+    "type": "int",
+    "description": "网页最多列多少条看过的视频",
+    "default": 80
+  },
+  "feedback_boost": {
+    "type": "float",
+    "description": "主人给 4-5 星的同类方向加多少权重",
+    "default": 3.0
+  },
+  "feedback_penalty": {
+    "type": "float",
+    "description": "主人给 1-2 星的同类方向扣多少权重",
+    "default": 5.0
+  },
+  "watchui_url": {
+    "type": "string",
+    "description": "打分台服务地址（只在本机监听，靠 SSH 隧道访问）",
+    "default": "http://127.0.0.1:18900"
+  },
+  "watchui_token_file": {
+    "type": "string",
+    "description": "打分台口令文件路径",
+    "default": "data/bili_whale/watchui_token.txt"
+  },
+  "daily_push_enable": {
+    "type": "bool",
+    "description": "每天定时把「大肥鱼看过什么」打分文件发到 QQ",
+    "default": true
+  },
+  "daily_push_cron": {
+    "type": "string",
+    "description": "每日推送的 cron（默认每天 21:00）",
+    "default": "0 21 * * *"
+  },
+  "daily_push_file": {
+    "type": "string",
+    "description": "推送给主人的文件名",
+    "default": "大肥鱼看过什么.html"
+  },
+  "daily_push_link": {
+    "type": "bool",
+    "description": "推送时先单发一条「手机能直接打开的打分链接」（公网地址来自 public_url.txt）",
+    "default": true
+  },
+  "daily_push_send_file": {
+    "type": "bool",
+    "description": "是否还附带发那份离线 HTML 文件（关了就只发链接）",
+    "default": true
+  },
+  "topic_weight_enable": {
+    "type": "bool",
+    "description": "按主人打星的主题均分调选题权重（打分台 → 第二天选题）",
+    "default": true
+  },
+  "llm_provider_id": {
+    "type": "string",
+    "description": "用哪个 LLM（留空=用当前会话默认）",
+    "hint": "例如 deepseek/deepseek-flash",
+    "default": "deepseek/deepseek-flash"
+  },
+  "persona_source": {
+    "type": "string",
+    "default": "astrbot",
+    "options": [
+      "astrbot",
+      "file"
+    ],
+    "description": "人设从哪来：astrbot=跟 AstrBot 面板里当前生效的人格（推荐，改人格不用改插件）；file=只用下面的 persona_file"
+  },
+  "persona_id": {
+    "type": "string",
+    "default": "",
+    "description": "指定用哪个人格（留空 = AstrBot 当前默认人格），一般不用填"
+  },
+  "persona_file": {
+    "type": "string",
+    "description": "人格设定文件路径（留空用插件内置那份）",
+    "default": ""
+  },
+  "subtitle_max_chars": {
+    "type": "int",
+    "description": "字幕最多读多少字（太长会截断）",
+    "default": 6000
+  },
+  "quiet_hours": {
+    "type": "list",
+    "description": "安静时段（不在QQ发任何东西）",
+    "hint": "24 小时制，例如 [\"02:00\", \"08:00\"]；留空=不限制",
+    "default": []
+  },
+  "debug": {
+    "type": "bool",
+    "description": "调试日志",
+    "default": false
+  },
+  "dm_share_card_enable": {
+    "type": "bool",
+    "description": "私信分享视频时发视频卡片",
+    "hint": "默认开。关掉就退回一条带网页链接的文字。",
+    "default": true
+  },
+  "dm_report_to_qq": {
+    "type": "bool",
+    "description": "B站私信往来复述到 QQ",
+    "hint": "默认关：主人在 B站 私信里本来就看得到，不用再复述一遍。",
+    "default": false
+  },
+  "dm_video_review": {
+    "type": "bool",
+    "description": "主人私信推视频时她看完并回评价",
+    "hint": "默认开。主人把视频分享到 B站 私信，她会拉详情、写一段感受回你。",
+    "default": true
+  }
+}
