@@ -38,6 +38,41 @@
 
 ## 快速开始
 
+### 一键安装（推荐）
+
+**Linux / 服务器（Ubuntu、Debian、CentOS 都行）**
+
+```bash
+curl -fsSL https://gh-proxy.com/https://raw.githubusercontent.com/miRaCleZ-cr/dafeiyu-whale/main/deploy/install.sh -o install.sh
+sudo bash install.sh
+```
+
+脚本会问你四个问题（QQ 号 / 群号 / 你的 B站 mid / 她自己的 mid），然后自动做完这些：
+找到 AstrBot → 备份旧插件 → 装两个插件 → 装 pip 依赖（清华源兜底）→ 写配置 → 生成 B站 凭证占位文件 → 重启 AstrBot。
+
+- 不想被问：`sudo OWNER_QQ=123456 GROUP_IDS=111,222 OWNER_MID=413000000 SELF_MID=3747000000000000 bash install.sh -y`
+- 顺便装打分台：加 `--with-watchui`（会注册 `qqbot-watchui` 服务并生成访问口令）
+- 国内直连 GitHub 慢的话换镜像：`MIRROR=https://gh-proxy.com/`（默认已经是这个）
+- AstrBot 不在 `/opt/astrbot`：`ASTRBOT_DIR=/你的/路径`
+- 只想看它要干什么：`--dry-run`
+
+**Windows（PowerShell）**
+
+```powershell
+# 先 git clone 或者下载 zip 解压，cd 进仓库目录
+powershell -NoProfile -ExecutionPolicy Bypass -File deploy\install.ps1 -AstrBotDir "D:\qqbot\localbot\src\AstrBot-4.29.3" `
+  -OwnerQQ 123456 -GroupIds "111,222" -OwnerMid 413000000 -SelfMid 3747000000000000
+```
+
+> Windows 上 `.ps1` 必须是 **UTF-8 with BOM**，且执行策略要是 Bypass（上面那行命令已经带了）。
+> 仓库里的脚本已经是 BOM 版，直接跑就行。
+
+**装完还差三步人肉操作**（脚本没法替你做）：填 B站 凭证、核对配置里的 ID、重启 AstrBot。
+后面几节讲的就是这些。
+
+### 手动安装
+
+
 ### 0. 环境
 
 - AstrBot **4.29.x**（`astrbot` >= 4.29）

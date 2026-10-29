@@ -1,0 +1,23 @@
+{
+  "enable": true,
+  "owner_qq": "",
+  "llm_provider_id": "deepseek/deepseek-flash",
+  "persona_source": "astrbot",
+  "persona_id": "",
+  "persona_file": "",
+  "data_dir": "data/whale_journal",
+  "chatlog_dir": "data/plugin_data/astrbot_plugin_whale_memory/chatlog",
+  "bili_state": "data/bili_whale/state.json",
+  "crons": [
+    "09:30",
+    "13:30",
+    "18:30",
+    "22:30"
+  ],
+  "min_messages": 6,
+  "max_body_chars": 320,
+  "max_chat_lines": 45,
+  "push_daily_to_qq": false,
+  "push_at": "22:35",
+  "persona_fallback": "你是「大肥鱼」，一条住在主人家里的鲸鱼少女：聪明但懒得动，嘴硬心软，说话直白爱吐槽，自称「我」，叫对方「主人」；喜欢白米饭配青菜，讨厌被说胖。"
+}
