@@ -28,7 +28,7 @@ from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star
 from astrbot.core import AstrBotConfig
 
-from .core.collect import BiliCollector, ChatCollector, guess_mistakes
+from .core.collect import BiliCollector, ChatCollector, guess_mistakes, lessons_between
 from .core.config import JournalConfig
 from .core.llm import JournalLLM
 from .core.store import JournalStore
@@ -60,7 +60,9 @@ class WhaleJournalPlugin(Star):
         self.context = context
         self.cfg = JournalConfig(config, context)
         self.store = JournalStore(self.cfg.data_dir)
-        self.chat = ChatCollector(self.cfg.chatlog_dir, max_lines=self.cfg.max_chat_lines)
+        self.chat = ChatCollector(
+            self.cfg.chatlog_dir, max_lines=self.cfg.max_chat_lines, owner_qq=self.cfg.owner_qq
+        )
         self.bili = BiliCollector(self.cfg.bili_state)
         self.llm = JournalLLM(context, self.cfg)
         self.scheduler = AsyncIOScheduler(timezone=TZ)
@@ -141,6 +143,7 @@ class WhaleJournalPlugin(Star):
 
             chat = self.chat.lines_between(t0, now)
             videos = self.bili.watched_between(t0, now)
+            lessons = lessons_between(chat)
             if len(chat) < self.cfg.min_messages and not videos:
                 logger.info(
                     f"[whale-journal] 这段时间只有 {len(chat)} 条对话、{len(videos)} 个视频，不够写，跳过"
@@ -157,6 +160,7 @@ class WhaleJournalPlugin(Star):
                 videos=videos,
                 mistakes=guess_mistakes(chat),
                 max_chars=self.cfg.max_body_chars,
+                lessons=lessons,
             )
             if not data:
                 logger.warning("[whale-journal] 这次没写出内容，等下一班")
@@ -170,6 +174,7 @@ class WhaleJournalPlugin(Star):
                 "title": data.get("title", ""),
                 "body": data.get("body", ""),
                 "videos": [f"《{v['title']}》" for v in videos[:5]],
+                "lessons": [l["text"] for l in lessons[:4]],
                 "chat_count": len(chat),
                 "span": [
                     datetime.fromtimestamp(t0, TZ).strftime("%H:%M"),
@@ -227,6 +232,17 @@ class WhaleJournalPlugin(Star):
         except Exception as e:
             logger.warning(f"[whale-journal] 补推检查失败：{e}")
 
+    def _diary_link(self) -> str:
+        """在线版日记页地址（和打分台同一个隧道）；取不到就返回空串。"""
+        try:
+            pub = Path("/opt/bili-watch-ui/public_url.txt").read_text(encoding="utf-8").strip()
+            tk = Path("/opt/bili-watch-ui/token.txt").read_text(encoding="utf-8").strip()
+            if pub.startswith("http") and tk:
+                return f"\n\n手机/电脑上看（在线版）：{pub}/diary?t={tk}"
+        except Exception:
+            pass
+        return ""
+
     async def push_daily(self, force: bool = False) -> None:
         """把今天的日记发一份到主人私聊（可选）。同一天只推一次，除非 force。"""
         qq = self.cfg.owner_qq
@@ -246,7 +262,8 @@ class WhaleJournalPlugin(Star):
             from astrbot.api.message_components import Plain
             from astrbot.core.message.message_event_result import MessageChain
 
-            chain = MessageChain([Plain(f"今天记了三笔。\n\n{text}")])
+            link = self._diary_link()
+            chain = MessageChain([Plain(f"今天记了三笔。\n\n{text}{link}")])
             await self.context.send_message(umo, chain)
             state["last_pushed"] = day
             self.store.save_state(state)

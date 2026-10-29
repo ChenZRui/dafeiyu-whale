@@ -161,7 +161,8 @@ class JournalLLM:
 
     # ------------------------------------------------------------ 主入口
     async def write_entry(self, *, now_hm: str, chat: list[dict], videos: list[dict],
-                          mistakes: list[str], max_chars: int) -> dict | None:
+                          mistakes: list[str], max_chars: int,
+                          lessons: list[dict] | None = None) -> dict | None:
         """让 LLM 写一条日记，返回 {mood, title, body}；失败返回 None。"""
         # 每次写日记都重读一次人格：主人在面板里改人设不用重启插件
         self._persona = None
@@ -172,6 +173,9 @@ class JournalLLM:
             f"- {v['title']}（up：{v['up'] or '未知'}）" for v in videos
         ) or "（这段时间没刷视频）"
         mistake_lines = "\n".join(f"- {m}" for m in mistakes) or "（没有明显的）"
+        lesson_lines = "\n".join(
+            f"- {l.get('hm','')}【{l.get('where','')}】{l.get('text','')}" for l in (lessons or [])
+        ) or "（这段时间没教你什么新东西）"
 
         prompt = f"""现在是今天的 {now_hm}。把这段时间里真实发生的事，写成你日记本上的一段话。
 
@@ -181,6 +185,9 @@ class JournalLLM:
 【这段时间你在 B 站刷到/看过的视频】
 {video_lines}
 
+【主人这段时间教你、给你立的规矩（最重要，必须写进去）】
+{lesson_lines}
+
 【可能让你被吐槽或犯错的地方（仅供参考，没有就不用提）】
 {mistake_lines}
 
@@ -188,6 +195,8 @@ class JournalLLM:
 - 心情标签：2-6 个字，要具体（比如「有点想笑」「踏实」「有点得意」「有点心虚」「烦」）。
 - 正文 60-200 字，像随手记在本子上的一小段。挑最有感觉的一两件事写，别面面俱到。
 - 视频可以只提一个名字或一句观感，对话可以只提一句被戳到的话。
+- **必须写一条你今天被主人教的东西**：他跟你说了什么规矩、要求、纠正（比如怎么回话、别做什么、以后要怎样），用你自己的话写进正文里，可以带一句你的态度（认下/不服/心里记着）。如果这段素材里真的没有教学内容，才跳过这条。
+- 主人是在私聊里跟你说的（一对一），这部分要占正文的主要位置；群里别人说的话是背景。
 - 如果是你自己的小失误、被主人纠正了，就老老实实写下来（可以带点不服气或者心虚）。
 
 只输出 JSON：{{"mood": "...", "title": "...", "body": "..."}}

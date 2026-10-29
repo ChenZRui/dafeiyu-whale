@@ -92,6 +92,10 @@ class JournalStore:
             if body:
                 lines.append(body)
                 lines.append("")
+            for l in (e.get("lessons") or [])[:4]:
+                lines.append(f"> 主人教我的：{l}")
+            if e.get("lessons"):
+                lines.append("")
         path = self.dir / f"{day}.md"
         try:
             path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
@@ -150,6 +154,10 @@ def render_html(entries: list[dict], *, title: str = "大肥鱼的日记本") ->
             if videos:
                 lis = "".join(f"<li>{v}</li>" for v in videos[:5])
                 extra = f'<div class="vids"><span class="vh">看了</span><ul>{lis}</ul></div>'
+            lessons = e.get("lessons") or []
+            if lessons:
+                lis = "".join(f"<li>{l}</li>" for l in lessons[:4])
+                extra += f'<div class="vids lessons"><span class="vh">主人教我的</span><ul>{lis}</ul></div>'
             mood_tag = (
                 f'<span class="mood" style="background:{color}">心情 · {mood}</span>'
                 if mood

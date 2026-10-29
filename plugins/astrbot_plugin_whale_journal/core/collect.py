@@ -36,7 +36,7 @@ def _parse_ts(s: Any) -> float:
 
 
 def _umo_label(umo: str) -> str:
-    """aiocqhttp:GroupMessage:20001 -> 群 20001；FriendMessage -> 私聊。"""
+    """jingyuniang:GroupMessage:594538361 -> 群 594538361；FriendMessage -> 私聊。"""
     parts = str(umo or "").split(":")
     if len(parts) >= 3:
         kind, target = parts[1], parts[2]
@@ -49,9 +49,19 @@ def _umo_label(umo: str) -> str:
 
 
 class ChatCollector:
-    def __init__(self, chatlog_dir: Path, *, max_lines: int = 45):
+    def __init__(self, chatlog_dir: Path, *, max_lines: int = 45, owner_qq: str = ""):
         self.dir = Path(chatlog_dir)
         self.max_lines = max_lines
+        self.owner_qq = str(owner_qq or "").strip()
+
+    def _is_owner_dm(self, umo: str) -> bool:
+        """这条是不是主人跟她的私聊（umo 形如 plat:FriendMessage:<qq>）。"""
+        parts = str(umo or "").split(":")
+        if len(parts) < 3 or "Friend" not in parts[1]:
+            return False
+        if not self.owner_qq:
+            return True
+        return parts[2] == self.owner_qq
 
     def lines_between(self, t0: float, t1: float) -> list[dict]:
         """取 [t0, t1] 之间的对话，按时间正序。"""
@@ -82,13 +92,16 @@ class ChatCollector:
                         text = str(rec.get("text") or "").strip()
                         if not text:
                             continue
+                        umo = str(rec.get("umo") or "")
+                        owner_dm = self._is_owner_dm(umo)
                         out.append(
                             {
                                 "ts": ts,
                                 "hm": time.strftime("%H:%M", time.localtime(ts)),
-                                "who": "我" if rec.get("role") == "assistant" else "别人",
-                                "where": _umo_label(rec.get("umo")),
+                                "who": "我" if rec.get("role") == "assistant" else ("主人" if owner_dm else "别人"),
+                                "where": _umo_label(umo),
                                 "text": text,
+                                "owner_dm": owner_dm,
                             }
                         )
             except Exception as e:
@@ -141,6 +154,52 @@ class BiliCollector:
             )
         out.sort(key=lambda x: x["ts"], reverse=True)
         return out[:limit]
+
+
+# 这类是插件自己塞进去的提示词/system 文本，被 chatlog 当成用户消息记下来了，当教学素材会污染日记
+_NOISE = (
+    "用户原话：", "用户原话:", "这是普通聊天", "不要提及图片库", "不要说明“没有找到图片”",
+    "请直接按你当前的人格", "按你当前的人格自然回应", "不要编造已经发送过图片",
+    "[BiliBili", "system_prompt", "你正在扮演",
+)
+
+_TEACH_CUES = (
+    "记住", "记着", "你要", "你得", "以后", "下次", "不要", "别忘", "必须", "应该",
+    "教", "规矩", "答应", "说过", "不准", "只能", "记得", "学会", "改", "别再",
+)
+
+
+def lessons_between(lines: list[dict], limit: int = 6) -> list[dict]:
+    """挑出主人在教她东西/立规矩的那几句话（私聊优先，其次群里）。"""
+    out: list[dict] = []
+    seen: set[str] = set()
+    for ln in lines:
+        if ln.get("who") == "我":
+            continue
+        text = (ln.get("text") or "").strip()
+        if not text or len(text) > 160:
+            continue
+        if any(n in text for n in _NOISE):
+            continue
+        if not any(c in text for c in _TEACH_CUES):
+            continue
+        key = text[:24]
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(
+            {
+                "hm": ln.get("hm", ""),
+                "text": text,
+                "where": ln.get("where", ""),
+                "owner_dm": bool(ln.get("owner_dm")),
+            }
+        )
+        if len(out) >= limit:
+            break
+    # 主人私聊里的话优先放在前面
+    out.sort(key=lambda x: (not x["owner_dm"], x["hm"]))
+    return out
 
 
 def guess_mistakes(lines: list[dict], limit: int = 5) -> list[str]:

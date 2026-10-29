@@ -8,9 +8,9 @@
     GET  /cover/<bvid>.jpg     封面缓存
     GET  /health               健康检查
 
-数据来源（只读）：data/bili_whale/state.json
-写出的东西：    data/bili_whale/ratings.json
-                data/bili_whale/covers/
+数据来源（只读）：/opt/astrbot/data/bili_whale/state.json
+写出的东西：    /opt/astrbot/data/bili_whale/ratings.json
+                /opt/astrbot/data/bili_whale/covers/
 """
 
 from __future__ import annotations
@@ -28,19 +28,29 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-DATA = Path(os.environ.get("WATCHUI_DATA", "data/bili_whale"))
+DATA = Path(os.environ.get("WATCHUI_DATA", "/opt/astrbot/data/bili_whale"))
 STATE = DATA / "state.json"
 RATINGS = DATA / "ratings.json"
 COVERS = DATA / "covers"
 COVER_INDEX = COVERS / "index.json"
-CRED_FILE = Path(os.environ.get("WATCHUI_CRED", "data/bili_whale/credentials.json"))
-TOKEN_FILE = Path(os.environ.get("WATCHUI_TOKEN_FILE", "data/bili_whale/watchui_token.txt"))
+DIARY_FILE = Path(os.environ.get("WATCHUI_DIARY", "/opt/astrbot/data/whale_journal/entries.jsonl"))
+CRED_FILE = Path(os.environ.get("WATCHUI_CRED", "/opt/bili-ai/credentials.json"))
+TOKEN_FILE = Path(os.environ.get("WATCHUI_TOKEN_FILE", "/opt/bili-watch-ui/token.txt"))
 PUBLIC_URL_FILE = Path(os.environ.get("WATCHUI_PUBLIC_URL_FILE", "/opt/bili-watch-ui/public_url.txt"))
 PORT = int(os.environ.get("WATCHUI_PORT", "18900"))
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 )
+
+try:
+    from diary_view import load_entries as diary_entries, render_diary
+except Exception:  # 单文件跑也不会崩
+    try:
+        from .diary_view import load_entries as diary_entries, render_diary
+    except Exception:
+        diary_entries = None
+        render_diary = None
 
 _lock = threading.Lock()
 _cover_lock = threading.Lock()
@@ -402,6 +412,9 @@ body{{margin:0;max-width:100vw;overflow-x:hidden;background:radial-gradient(1200
 .wrap{{max-width:1180px;margin:0 auto;padding:28px 18px 80px}}
 header h1{{margin:0 0 6px;font-size:30px;letter-spacing:.5px}}
 header h1 span{{background:linear-gradient(90deg,var(--acc),var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}}
+.pnav{{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}}
+.pnav a{{text-decoration:none;font-size:13px;color:var(--dim);background:var(--card);border:1px solid var(--line);border-radius:999px;padding:6px 14px}}
+.pnav a.pnav-on{{color:#08131a;background:linear-gradient(90deg,var(--acc),var(--acc2));border-color:transparent;font-weight:700}}
 .lead{{color:var(--dim);margin:2px 0 14px;font-size:13.5px}}
 .stats{{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0 16px}}
 .kpi{{background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--line);border-radius:14px;padding:10px 14px;min-width:104px}}
@@ -489,6 +502,7 @@ footer{{margin-top:34px;color:#4d5a74;font-size:12px;text-align:center}}
 </style></head>
 <body><div class="wrap">
 <header>
+  <nav class="pnav"><a class="pnav-on" href="#">她看过什么</a><a href="/diary?t={tk}">她的日记本</a></nav>
   <h1>大肥鱼<span>看过什么</span></h1>
   {head_extra}
 </header>
@@ -727,7 +741,9 @@ class Handler(BaseHTTPRequestHandler):
                     "<h2 style='margin:0 0 10px'>大肥鱼看过什么</h2>"
                     "<p style='color:#8b9ab5;margin:0 0 22px'>隧道已经通了，点下面进打分台</p>"
                     f"<a href='/watch?t={tk}' style='display:inline-block;padding:14px 36px;border-radius:999px;"
-                    "background:linear-gradient(90deg,#5ee1c1,#7aa2ff);color:#08131a;font-weight:700;text-decoration:none'>进打分台</a>"
+                    "background:linear-gradient(90deg,#5ee1c1,#7aa2ff);color:#08131a;font-weight:700;text-decoration:none;margin:0 6px 10px'>进打分台</a>"
+                    f"<a href='/diary?t={tk}' style='display:inline-block;padding:14px 36px;border-radius:999px;"
+                    "background:#1b2334;border:1px solid #26314a;color:#e8eefc;font-weight:700;text-decoration:none;margin:0 6px 10px'>看她的日记本</a>"
                     "</div></body></html>"
                 )
             return self._html("<h3>需要口令</h3>", 403)
@@ -735,6 +751,15 @@ class Handler(BaseHTTPRequestHandler):
             rows = load_items()
             warm_covers(rows)
             return self._html(render(rows, snapshot=False, tk=token()))
+        if path in ("/diary", "/diary/"):
+            if diary_entries is None or render_diary is None:
+                return self._json({"ok": False, "message": "diary_view 未加载"}, 500)
+            rows = diary_entries(DIARY_FILE)
+            return self._html(render_diary(rows, tk=token(), public=public_url()))
+        if path == "/diary.json":
+            if diary_entries is None:
+                return self._json({"ok": False}, 500)
+            return self._json({"ok": True, "entries": diary_entries(DIARY_FILE)})
         if path == "/snapshot":
             rows = load_items()
             return self._html(render(rows, snapshot=True, tk=token()))
