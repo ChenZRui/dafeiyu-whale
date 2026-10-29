@@ -92,6 +92,18 @@ class WhaleJournalPlugin(Star):
                     misfire_grace_time=1800,
                     replace_existing=True,
                 )
+                # 补偿班：22:35 检查时那篇可能还没写出来（写日记的班次在它之后或者被跳过），
+                # 25 分钟后再补一次，已经推过就自动跳过，不会重复烦人。
+                late = datetime.now(TZ).replace(hour=int(hh), minute=int(mm)) + timedelta(minutes=25)
+                if late.date() == datetime.now(TZ).date():
+                    self.scheduler.add_job(
+                        self.push_daily,
+                        CronTrigger(hour=late.hour, minute=late.minute, timezone=TZ),
+                        id="journal-push-late",
+                        max_instances=1,
+                        misfire_grace_time=1800,
+                        replace_existing=True,
+                    )
             except Exception as e:
                 logger.warning(f"[whale-journal] push_at 解析失败：{e}")
         self.scheduler.start()
@@ -172,6 +184,7 @@ class WhaleJournalPlugin(Star):
                 f"[whale-journal] 写好了 {entry['day']} {entry['hm']}｜心情「{entry['mood']}」｜"
                 f"{len(chat)} 条对话 / {len(videos)} 个视频｜{entry['body'][:40]}……"
             )
+            await self._push_after_write()
             return entry
         except Exception as e:
             logger.error(f"[whale-journal] 写日记出错：{e}")
@@ -199,15 +212,31 @@ class WhaleJournalPlugin(Star):
                 return self._platform_name
         except Exception as e:
             logger.warning(f"[whale-journal] 探测平台失败：{e}")
-        self._platform_name = "aiocqhttp"
+        self._platform_name = "jingyuniang"
         return self._platform_name
 
-    async def push_daily(self) -> None:
-        """把今天的日记发一份到主人私聊（可选）。"""
+    async def _push_after_write(self) -> None:
+        """写完一篇之后：如果今天的推送时间已经过了、并且还没推过，就立刻补推。"""
+        if not (self.cfg.push_daily_to_qq and self.cfg.owner_qq):
+            return
+        try:
+            hh, mm = str(self.cfg.push_at).split(":", 1)
+            push_at = datetime.now(TZ).replace(hour=int(hh), minute=int(mm), second=0, microsecond=0)
+            if datetime.now(TZ) >= push_at:
+                await self.push_daily()
+        except Exception as e:
+            logger.warning(f"[whale-journal] 补推检查失败：{e}")
+
+    async def push_daily(self, force: bool = False) -> None:
+        """把今天的日记发一份到主人私聊（可选）。同一天只推一次，除非 force。"""
         qq = self.cfg.owner_qq
         if not qq:
             return
         day = datetime.now(TZ).date().isoformat()
+        state = self.store.load_state()
+        if not force and state.get("last_pushed") == day:
+            logger.info("[whale-journal] 今天的日记已经推过了，跳过")
+            return
         text = self.store.day_text(day).strip()
         if not text:
             logger.info("[whale-journal] 今天还没有日记，不推")
@@ -219,6 +248,8 @@ class WhaleJournalPlugin(Star):
 
             chain = MessageChain([Plain(f"今天记了三笔。\n\n{text}")])
             await self.context.send_message(umo, chain)
+            state["last_pushed"] = day
+            self.store.save_state(state)
             logger.info(f"[whale-journal] 今日日记已发给 {qq}")
         except Exception as e:
             logger.warning(f"[whale-journal] 推送日记失败：{e}")
@@ -244,6 +275,17 @@ class WhaleJournalPlugin(Star):
         yield event.plain_result(
             f"写好了：{entry['hm']}｜心情「{entry['mood']}」\n{entry['body']}"
         )
+
+    @filter.command("推日记")
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    async def cmd_push(self, event: AstrMessageEvent):
+        day = datetime.now(TZ).date().isoformat()
+        text = self.store.day_text(day).strip()
+        if not text:
+            yield event.plain_result("今天还没写日记，没什么可推的。")
+            return
+        await self.push_daily(force=True)
+        yield event.plain_result("推了，去私聊看看。")
 
     @filter.command("日记状态")
     @filter.permission_type(filter.PermissionType.ADMIN)
