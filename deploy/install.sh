@@ -96,13 +96,24 @@ detect_astrbot() {
   die "没找到 AstrBot（$ASTRBOT_DIR/main.py 不存在）。用 ASTRBOT_DIR=/你的/路径 指定。"
 }
 
+py_works() { "$1" -c 'print(1)' >/dev/null 2>&1; }
+
 detect_python() {
-  for p in "$ASTRBOT_DIR/venv/bin/python" "$ASTRBOT_DIR/.venv/bin/python" "$ASTRBOT_DIR/venv/bin/python3"; do
-    if [ -x "$p" ]; then PY="$p"; return 0; fi
+  local cand
+  for cand in "$ASTRBOT_DIR/venv/bin/python" "$ASTRBOT_DIR/.venv/bin/python" \
+              "$ASTRBOT_DIR/venv/bin/python3" "$(command -v python3 || true)" "$(command -v python || true)"; do
+    [ -n "$cand" ] || continue
+    [ -x "$cand" ] || continue
+    if py_works "$cand"; then
+      PY="$cand"
+      case "$cand" in
+        "$ASTRBOT_DIR"/*) ;;
+        *) c_warn "没找到 AstrBot 的 venv，退而用 $cand（依赖可能装错地方）" ;;
+      esac
+      return 0
+    fi
   done
-  PY="$(command -v python3 || command -v python || true)"
-  [ -n "$PY" ] || die "找不到 python，先用 AstrBot 自带的 venv 跑过再说。"
-  c_warn "没找到 AstrBot 的 venv，退而用 $PY（依赖可能装错地方）"
+  die "没有可用的 python（AstrBot 的 venv/bin/python 也跑不起来）。先确认 AstrBot 本身能启动再装插件。"
 }
 
 # ---------- 2. 取源码 ----------
