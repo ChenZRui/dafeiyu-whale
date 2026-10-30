@@ -14,6 +14,27 @@
 | `plugins/astrbot_plugin_whale_journal` | 日记本插件：每天 4 次把「你们聊了什么、她看了什么、她犯了什么错」写成带心情标签的日记 |
 | `watchui/watchui.py` | 打分台小服务：观看历史墙、按天目录、星星打分、评价、收藏、一键跳 B站，手机可在线打分 |
 
+### 🆕 打分台 + 日记本，现在也是一个 AstrBot 插件了
+
+不想折腾隧道、单独跑服务、记访问口令的，可以只装这一个插件：
+
+**大肥鱼面板 · `astrbot_plugin_dafeiyu_panel`**
+仓库：<https://github.com/ChenZRui/astrbot_plugin_dafeiyu_panel> ·
+市场：AstrBot 面板 → 插件市场 → 搜「**大肥鱼面板**」
+
+装完在 **面板 → 插件 → 大肥鱼面板 → 打开页面** 就有两个 tab：
+`她看过什么`（打分 / 评价 / 收藏）和 `她的日记本`（心情、正文、主人教我的）。
+数据跟你现在的两个插件完全共用，**不用迁移、不用导数据**，手机上打开面板就能打分。
+
+| | `watchui.py` 独立服务 | `astrbot_plugin_dafeiyu_panel` 面板插件 |
+| --- | --- | --- |
+| 装法 | 手动放文件 + systemd + 生成口令 | 插件市场一键装 |
+| 访问 | 自己开隧道 / 反代，带 `?t=<token>` | 面板自带登录鉴权 |
+| 手机 | 要能连到那台机器或走隧道 | 打开面板就行 |
+| 适合 | 想独立部署、想给别的项目复用 | 就想在 AstrBot 里点两下 |
+
+两者可以同时存在，数据读写的是同一份 `state.json` / `entries.jsonl`。
+
 ![打分台（电脑）](docs/watchui-desktop.png)
 
 手机上打开是同一个页面，目录收成横向滑条、卡片单列，星星/评价/收藏都能直接点：
@@ -410,6 +431,16 @@ core/
 - 群里分享记得判断 `group_share_enable`，别把测试消息刷到别人的群。
 
 ---
+
+## 相关仓库
+
+| 仓库 | 内容 |
+| --- | --- |
+| [ChenZRui/dafeiyu-whale](https://github.com/ChenZRui/dafeiyu-whale) | 本仓库：两个 AstrBot 插件 + 打分台小服务 + 一键部署脚本 |
+| [ChenZRui/astrbot_plugin_dafeiyu_panel](https://github.com/ChenZRui/astrbot_plugin_dafeiyu_panel) | **大肥鱼面板**：把「打分台 + 日记本」做成单个 AstrBot 插件，插件市场一键装，面板里直接打分看日记 |
+
+面板插件是这套东西的「面板形态」——数据源仍然是本仓库里的 `astrbot_plugin_bili_whale`
+和 `astrbot_plugin_whale_journal`，两者共用同一份 `state.json` 和 `entries.jsonl`，装哪个都不冲突。
 
 ## 风险与合规
 
