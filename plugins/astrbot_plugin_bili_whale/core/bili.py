@@ -280,7 +280,7 @@ class BiliClient:
                             "pubdate_str": ts2str(it.get("pubdate")),
                             "keyword": kw,
                             "reason": "",
-                            "cover": "",
+                            "cover": str(it.get("pic") or ""),
                             "url": f"https://www.bilibili.com/video/{bvid}",
                             "from": "search",
                         }
