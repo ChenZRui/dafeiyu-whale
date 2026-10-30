@@ -323,12 +323,12 @@ def render(items: list[dict], *, snapshot: bool, tk: str) -> str:
                         b64 = base64.b64encode((COVERS / name).read_bytes()).decode()
                         img = f'<img class="cv" src="data:image/jpeg;base64,{b64}" alt="">'
                     except Exception:
-                        img = '<div class="cv ph">没有封面</div>'
+                        img = '<div class="cv ph">视频已不可见<br><i>B站取不到封面</i></div>'
                 else:
-                    img = '<div class="cv ph">没有封面</div>'
+                    img = '<div class="cv ph">视频已不可见<br><i>B站取不到封面</i></div>'
             else:
                 name = cover_file(it["bvid"], it.get("cover") or "")
-                img = f'<img class="cv" loading="lazy" src="/cover/{name}" alt="">' if name else '<div class="cv ph">没有封面</div>'
+                img = f'<img class="cv" loading="lazy" src="/cover/{name}" alt="">' if name else '<div class="cv ph">视频已不可见<br><i>B站取不到封面</i></div>'
 
             stars = "".join(
                 f'<span class="st{" on" if s <= it["stars"] else ""}" data-s="{s}">★</span>' for s in range(1, 6)
@@ -455,6 +455,7 @@ main{{flex:1 1 auto;min-width:0}}
 .card[data-fav="1"]{{border-color:rgba(255,207,107,.55);box-shadow:0 0 0 1px rgba(255,207,107,.18) inset}}
 .thumb{{position:relative;aspect-ratio:16/9;background:#0e1421;overflow:hidden}}
 .cv{{width:100%;height:100%;object-fit:cover;display:block}}
+.cv.ph i{{font-style:normal;font-size:11px;opacity:.55;display:inline-block;margin-top:4px}}
 .cv.ph{{display:flex;align-items:center;justify-content:center;color:#3d4a63;font-size:13px;height:100%}}
 .idx{{position:absolute;left:10px;top:10px;background:rgba(8,12,20,.72);border:1px solid rgba(255,255,255,.14);border-radius:8px;padding:2px 8px;font-size:12px;color:#cfe0ff}}
 .body{{padding:14px 14px 12px;display:flex;flex-direction:column;gap:9px}}
