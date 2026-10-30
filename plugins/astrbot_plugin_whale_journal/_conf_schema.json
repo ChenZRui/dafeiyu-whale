@@ -34,23 +34,23 @@
   "persona_file": {
     "description": "人设文件路径",
     "type": "string",
-    "default": "data/bili_whale/persona.txt",
+    "default": "/opt/astrbot/data/bili_whale/persona.txt",
     "hint": "必须填<b>文件路径</b>不是人设正文；读不到会退回内置的大肥鱼简介"
   },
   "data_dir": {
     "description": "日记本存放目录",
     "type": "string",
-    "default": "data/whale_journal"
+    "default": "/opt/astrbot/data/whale_journal"
   },
   "chatlog_dir": {
     "description": "对话记录目录（whale_memory 的 chatlog）",
     "type": "string",
-    "default": "data/plugin_data/astrbot_plugin_whale_memory/chatlog"
+    "default": "/opt/astrbot/data/plugin_data/astrbot_plugin_whale_memory/chatlog"
   },
   "bili_state": {
     "description": "B站插件状态文件（读她看过哪些视频）",
     "type": "string",
-    "default": "data/bili_whale/state.json"
+    "default": "/opt/astrbot/data/bili_whale/state.json"
   },
   "crons": {
     "description": "每天写日记的时间点",
@@ -91,5 +91,17 @@
     "description": "推送时间（push_daily_to_qq 开启时生效）",
     "type": "string",
     "default": "22:35"
+  },
+  "profile_enable": {
+    "type": "bool",
+    "default": true,
+    "description": "是否让她总结「主人画像」（性格/习惯/口头禅/心情/睡眠）",
+    "hint": "默认开"
+  },
+  "profile_min_hours": {
+    "type": "float",
+    "default": 6,
+    "description": "画像最短更新间隔（小时）",
+    "hint": "默认 6 小时算一次，最少 1"
   }
 }

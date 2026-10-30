@@ -31,6 +31,7 @@ from astrbot.core import AstrBotConfig
 from .core.collect import BiliCollector, ChatCollector, guess_mistakes, lessons_between
 from .core.config import JournalConfig
 from .core.llm import JournalLLM
+from .core.owner import LessonBook, OwnerProfile
 from .core.store import JournalStore
 
 TZ = timezone(timedelta(hours=8))
@@ -65,6 +66,8 @@ class WhaleJournalPlugin(Star):
         )
         self.bili = BiliCollector(self.cfg.bili_state)
         self.llm = JournalLLM(context, self.cfg)
+        self.profile = OwnerProfile(self.cfg.data_dir)
+        self.lessons = LessonBook(self.cfg.data_dir)
         self.scheduler = AsyncIOScheduler(timezone=TZ)
         self._platform_name: str | None = None
         self._running = False
@@ -189,6 +192,10 @@ class WhaleJournalPlugin(Star):
                 f"[whale-journal] 写好了 {entry['day']} {entry['hm']}｜心情「{entry['mood']}」｜"
                 f"{len(chat)} 条对话 / {len(videos)} 个视频｜{entry['body'][:40]}……"
             )
+            # 日记里出现的「主人教我的」→ 分好类存进 lessons.json
+            await self._absorb_lessons(lessons, entry["day"])
+            # 顺便更新主人画像（默认 6 小时最多算一次）
+            await self.maybe_profile()
             await self._push_after_write()
             return entry
         except Exception as e:
@@ -196,6 +203,62 @@ class WhaleJournalPlugin(Star):
             return None
         finally:
             self._running = False
+
+    # ------------------------------------------------------------ 主人画像 / 教我的
+    async def _absorb_lessons(self, lessons: list[dict], day: str) -> None:
+        """把这段时间学到的规矩按黑话/梗/调情/其他分类入库。"""
+        if not lessons:
+            return
+        pairs: list[dict] = []
+        try:
+            pairs = await self.llm.classify_lessons(lessons)
+        except Exception as e:
+            logger.warning(f"[whale-journal] 分类失败，先都记成「其他」：{e}")
+        if not pairs:
+            pairs = [{"text": l.get("text", ""), "category": "其他"} for l in lessons]
+        n = self.lessons.add_many(pairs, source="diary", day=day)
+        if n:
+            stats = self.lessons.stats()
+            logger.info(f"[whale-journal] 主人教我的 +{n}｜累计 {stats['total']} 条 {stats['counts']}")
+
+    async def maybe_profile(self, force: bool = False) -> dict | None:
+        """更新主人画像：默认 6 小时最多一次，用最近 24 小时聊天。"""
+        if not self.cfg.profile_enable and not force:
+            return None
+        now = time.time()
+        prev = self.profile.load()
+        last = 0.0
+        try:
+            last = float(prev.get("updated_ts") or 0)
+        except (TypeError, ValueError):
+            last = 0.0
+        if not force and last and now - last < self.cfg.profile_min_hours * 3600:
+            return None
+        try:
+            lines = self.chat.lines_between(now - 24 * 3600, now)
+            if len(lines) < 8:
+                logger.info(f"[whale-journal] 最近对话只有 {len(lines)} 条，暂不更新主人画像")
+                return None
+            chat_lines = "\n".join(
+                f"[{c['hm']}·{c['where']}] {c['who']}：{c['text'][:120]}" for c in lines[-80:]
+            )
+            fresh = await self.llm.profile_owner(chat_lines, prev)
+            if not fresh:
+                logger.warning("[whale-journal] 画像没生成出来（LLM 空输出）")
+                return None
+            merged = self.profile.merge(prev, fresh, days=1)
+            merged["updated_ts"] = now
+            self.profile.save(merged)
+            logger.info(
+                f"[whale-journal] 主人画像已更新｜心情 {merged['mood']['index']}/10 "
+                f"{merged['mood']['label']}｜睡眠 {merged['sleep']['quality']}｜"
+                f"性格 {len(merged['personality'])} 条 / 习惯 {len(merged['habits'])} 条 / "
+                f"口头禅 {len(merged['catchphrases'])} 条"
+            )
+            return merged
+        except Exception as e:
+            logger.error(f"[whale-journal] 更新主人画像出错：{e}")
+            return None
 
     # ------------------------------------------------------------ QQ 推送
     def platform_name(self) -> str:
@@ -321,3 +384,75 @@ class WhaleJournalPlugin(Star):
             last = entries[-1]
             head += f"\n最近一条：{last.get('day')} {last.get('hm')}「{last.get('mood')}」"
         yield event.plain_result(head)
+
+    # ------------------------------------------------------ 主人画像 / 教我的
+    @filter.command("主人画像", alias={"画像"})
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    async def cmd_profile(self, event: AstrMessageEvent):
+        view = self.profile.view()
+        if not view["has_data"]:
+            msg = await event.plain_result("还没算过你的画像，我现在看眼聊天记录……")
+            yield msg
+            await self.maybe_profile(force=True)
+            view = self.profile.view()
+            if not view["has_data"]:
+                yield event.plain_result("这两天聊得太少，还没法总结你。多跟我说几句？")
+                return
+        mood = view["mood"]
+        lines = [
+            f"你在我这儿是这样的（更新于 {view['updated_at']}）：",
+            f"心情 {mood['index']}/10 {mood['label']}｜{mood['note']}",
+            f"睡眠：{view['sleep']['quality']}｜{view['sleep']['note']}",
+            "性格：" + ("、".join(view["personality"]) or "—"),
+            "习惯：" + ("、".join(view["habits"]) or "—"),
+            "口头禅：" + ("、".join(view["catchphrases"]) or "—"),
+            f"（{view['summary']}）" if view["summary"] else "",
+        ]
+        yield event.plain_result("\n".join([l for l in lines if l]))
+
+    @filter.command("教我", alias={"教她", "记住这个"})
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    async def cmd_teach(self, event: AstrMessageEvent, category: str = "", content: str = ""):
+        """用法：/教我 黑话 你这波真的典 ｜ /教我 梗 急了急了 ｜ /教我 调情 晚安宝宝"""
+        cat = LessonBook.detect_category(f"{category} {content}") or (category or "其他")
+        text = LessonBook.strip_category_words(f"{content}") if content else ""
+        if not text:
+            yield event.plain_result(
+                "咋教：`/教我 黑话 xxx`、`/教我 梗 xxx`、`/教我 调情 xxx`，\n"
+                "也可以直接说「记住，这是黑话：xxx」，我自己分。"
+            )
+            return
+        item = self.lessons.add(text, cat, source="qq", day=datetime.now(TZ).date().isoformat())
+        if not item:
+            yield event.plain_result("这句太短了，记不住。")
+            return
+        stats = self.lessons.stats()
+        yield event.plain_result(
+            f"记下了（{item['category']}）：{item['text']}\n现在一共 {stats['total']} 条，"
+            f"黑话 {stats['counts']['黑话']}／梗 {stats['counts']['梗']}／调情 {stats['counts']['调情']}"
+        )
+
+    @filter.event_message_type(filter.EventMessageType.ALL)
+    async def auto_teach(self, event: AstrMessageEvent):
+        """聊天里出现「记住，这是黑话：xxx」这种，就自己分类记下来（不打断正常回复）。"""
+        try:
+            text = (event.get_message_str() or "").strip()
+            if not text or len(text) > 300:
+                return
+            umo = str(event.unified_msg_origin or "")
+            if self.cfg.owner_qq and self.cfg.owner_qq not in umo:
+                return
+            cat = LessonBook.detect_category(text)
+            if not cat:
+                return
+            if not any(k in text for k in ("记住", "教", "这是", "算", "以后")):
+                return
+            body = LessonBook.strip_category_words(text)
+            if len(body) < 2:
+                return
+            item = self.lessons.add(body, cat, source="qq-chat",
+                                    day=datetime.now(TZ).date().isoformat())
+            if item:
+                logger.info(f"[whale-journal] 聊天里学到一条（{item['category']}）：{item['text'][:40]}")
+        except Exception as e:
+            logger.warning(f"[whale-journal] 自动收教学失败：{e}")

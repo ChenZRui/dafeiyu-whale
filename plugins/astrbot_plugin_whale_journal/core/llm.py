@@ -222,6 +222,93 @@ title 是给这段起的一句话小标题（10 字以内），可以留空。""
             "body": body[:max_chars],
         }
 
+    async def profile_owner(self, chat_lines: str, prev: dict | None = None) -> dict | None:
+        """从最近的聊天里总结主人的画像（性格/习惯/口头禅/心情/睡眠）。"""
+        prev = prev or {}
+        prev_txt = json.dumps(
+            {
+                "personality": prev.get("personality") or [],
+                "habits": prev.get("habits") or [],
+                "catchphrases": prev.get("catchphrases") or [],
+                "summary": prev.get("summary") or "",
+            },
+            ensure_ascii=False,
+        )
+        prompt = f"""你是「大肥鱼」，下面是最近你和主人（以及其他群友）的聊天记录。
+
+【聊天记录（按时间顺序）】
+{chat_lines}
+
+【你之前对他的印象（有更新就改，没有就沿用）】
+{prev_txt}
+
+请只根据聊天记录里的**证据**，总结主人这个人。不要编，看不出来就留空。
+
+输出 JSON：
+{{
+  "personality": ["性格特征，4-8 个字一条，3-6 条，如「嘴上硬心里软」「自嘲型」"],
+  "habits": ["生活习惯，具体一点，2-6 条，如「凌晨两三点才睡」「边吃边聊」"],
+  "catchphrases": ["他常说的话/口头禅，原样摘 1-5 条，没有就空数组"],
+  "mood": {{"index": 1-10 的整数（今天整体心情，5=一般）, "label": "2-6 个字", "note": "一句依据"}},
+  "sleep": {{"quality": "很好/还行/不太好/很差/不知道", "note": "从哪句话看出来的，一句"}},
+  "summary": "一句话概括他最近的状态（30-60 字）",
+  "highlights": ["最近让你印象深的 1-3 件关于他的事，每条 15 字内"]
+}}
+
+只输出 JSON。"""
+        system = await self._with_persona(_HARD_RULES)
+        raw = await self.complete(system, prompt)
+        if not raw:
+            return None
+        return self._parse(raw)
+
+    async def classify_lessons(self, lessons: list[dict]) -> list[dict]:
+        """把「主人教的东西」分到黑话 / 梗 / 调情 / 其他。"""
+        texts = [str(l.get("text") or "").strip() for l in (lessons or []) if str(l.get("text") or "").strip()]
+        if not texts:
+            return []
+        listed = "\n".join(f"{i + 1}. {t[:160]}" for i, t in enumerate(texts))
+        prompt = f"""下面是主人教「大肥鱼」的话。请把每一条分到下面四类之一：
+
+- 黑话：圈内/网络用语、只有特定群体懂的说法（如「肝」「抽象」「典」）
+- 梗：网络梗、流行语、动漫/游戏/直播里的名场面说法
+- 调情：亲昵、撒娇、暧昧、带点小撩的话（如「想你了」「晚安宝宝」）
+- 其他：规矩、要求、习惯、纠正，不属于上面三类的
+
+【条目】
+{listed}
+
+输出 JSON 数组，按顺序，每条一个对象：
+[{{"i": 1, "category": "黑话", "text": "原句（可精简到 40 字内）"}}]
+
+category 只能是 黑话 / 梗 / 调情 / 其他 四个词之一。只输出 JSON。"""
+        system = await self._with_persona(_HARD_RULES)
+        raw = await self.complete(system, prompt)
+        if not raw:
+            return []
+        txt = _strip_fence(raw)
+        m = re.search(r"\[.*\]", txt, re.S)
+        if not m:
+            return []
+        try:
+            arr = json.loads(m.group(0))
+        except ValueError:
+            return []
+        out: list[dict] = []
+        for obj in arr if isinstance(arr, list) else []:
+            if not isinstance(obj, dict):
+                continue
+            try:
+                i = int(obj.get("i") or 0) - 1
+            except (TypeError, ValueError):
+                continue
+            if 0 <= i < len(texts):
+                out.append({
+                    "text": str(obj.get("text") or texts[i]).strip()[:160],
+                    "category": str(obj.get("category") or "其他").strip(),
+                })
+        return out
+
     @staticmethod
     def _parse(raw: str) -> dict | None:
         txt = _strip_fence(raw)

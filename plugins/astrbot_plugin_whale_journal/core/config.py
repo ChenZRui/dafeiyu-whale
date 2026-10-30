@@ -14,15 +14,18 @@ DEFAULTS: dict[str, Any] = {
     "persona_source": "astrbot",
     "persona_id": "",
     "persona_file": "",
-    "data_dir": "data/whale_journal",
-    "chatlog_dir": "data/plugin_data/astrbot_plugin_whale_memory/chatlog",
-    "bili_state": "data/bili_whale/state.json",
+    "data_dir": "/opt/astrbot/data/whale_journal",
+    "chatlog_dir": "/opt/astrbot/data/plugin_data/astrbot_plugin_whale_memory/chatlog",
+    "bili_state": "/opt/astrbot/data/bili_whale/state.json",
     "crons": ["09:30", "13:30", "18:30", "22:30"],
     "min_messages": 6,
     "max_body_chars": 320,
     "max_chat_lines": 45,
     "push_daily_to_qq": False,
     "push_at": "22:35",
+    # 主人画像：从聊天里总结性格/习惯/口头禅/心情/睡眠
+    "profile_enable": True,
+    "profile_min_hours": 6,
     "persona_fallback": (
         "你是「大肥鱼」，一条住在主人家里的鲸鱼少女：聪明但懒得动，嘴硬心软，"
         "说话直白爱吐槽，自称「我」，叫对方「主人」；喜欢白米饭配青菜，讨厌被说胖。"
@@ -109,6 +112,18 @@ class JournalConfig:
     @property
     def data_dir(self) -> Path:
         return Path(str(self.get("data_dir", DEFAULTS["data_dir"])))
+
+    @property
+    def profile_enable(self) -> bool:
+        return self._as_bool("profile_enable", True)
+
+    @property
+    def profile_min_hours(self) -> float:
+        try:
+            v = float(self.get("profile_min_hours", 6))
+        except (TypeError, ValueError):
+            v = 6.0
+        return max(1.0, v)
 
     @property
     def chatlog_dir(self) -> Path:
