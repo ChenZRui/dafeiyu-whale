@@ -49,7 +49,7 @@
 **Linux / 服务器（Ubuntu、Debian、CentOS 都行）**
 
 ```bash
-curl -fsSL https://gh-proxy.com/https://raw.githubusercontent.com/miRaCleZ-cr/dafeiyu-whale/main/deploy/install.sh -o install.sh
+curl -fsSL https://gh-proxy.com/https://raw.githubusercontent.com/ChenZRui/dafeiyu-whale/main/deploy/install.sh -o install.sh
 sudo bash install.sh
 ```
 

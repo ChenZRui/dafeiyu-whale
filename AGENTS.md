@@ -54,7 +54,7 @@ grep -r "__version__" "$ASTRBOT_DIR"/astrbot/__init__.py 2>/dev/null | head -3
 
 ```bash
 cd /tmp
-curl -fsSL https://gh-proxy.com/https://raw.githubusercontent.com/miRaCleZ-cr/dafeiyu-whale/main/deploy/install.sh -o install.sh
+curl -fsSL https://gh-proxy.com/https://raw.githubusercontent.com/ChenZRui/dafeiyu-whale/main/deploy/install.sh -o install.sh
 bash -n install.sh          # 先做语法检查（拿到别人给的不明脚本时永远这样做）
 sudo ASTRBOT_DIR=/opt/astrbot \
      OWNER_QQ=<QQ号> \

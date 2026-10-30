@@ -2,7 +2,7 @@
 # 大肥鱼 B站分身 —— 一键安装脚本
 #
 # 用法（最简单）：
-#   curl -fsSL https://gh-proxy.com/https://raw.githubusercontent.com/miRaCleZ-cr/dafeiyu-whale/main/deploy/install.sh -o install.sh
+#   curl -fsSL https://gh-proxy.com/https://raw.githubusercontent.com/ChenZRui/dafeiyu-whale/main/deploy/install.sh -o install.sh
 #   sudo bash install.sh
 #
 # 常用参数：
@@ -26,7 +26,7 @@
 #   SKIP_DEPS=1 SKIP_RESTART=1      跳过装依赖 / 跳过重启
 set -euo pipefail
 
-REPO="miRaCleZ-cr/dafeiyu-whale"
+REPO="ChenZRui/dafeiyu-whale"
 BRANCH="main"
 MIRROR="${MIRROR:-https://gh-proxy.com/}"
 PIP_INDEX="${PIP_INDEX:-https://pypi.tuna.tsinghua.edu.cn/simple}"
