@@ -91,6 +91,18 @@ _SHIM = """
       if (m && MAP[m[1]]) a.setAttribute('href', MAP[m[1]] + (TK ? ('?t=' + TK) : ''));
     });
   }
+  // 视图里的导航还有点 JS 直接写 location.href 的，capture 阶段先拦下来换成路由
+  var NAV = { watch: '/watch', journal: '/diary', profile: '/profile', lessons: '/lessons' };
+  document.addEventListener('click', function (e) {
+    var a = e.target && e.target.closest ? e.target.closest('a[data-nav]') : null;
+    if (!a) return;
+    var route = NAV[a.getAttribute('data-nav')];
+    if (!route) return;
+    e.preventDefault();
+    e.stopPropagation();
+    location.href = route + (TK ? ('?t=' + TK) : '');
+  }, true);
+  var VIEWS = { '她看过什么': '/watch', '她的日记本': '/diary', '主人画像': '/profile', '主人教我的': '/lessons' };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fixLinks);
   else fixLinks();
 })();
@@ -115,8 +127,18 @@ def has_views() -> bool:
     return VIEWS_DIR.is_dir() and any((VIEWS_DIR / v / "index.html").exists() for v in ROUTES.values())
 
 
+def route_for(path: str) -> str:
+    """把 /她看过什么/index.html 这类相对链接也认成 /watch。"""
+    path = urllib.parse.unquote(path)
+    for url, name in ROUTES.items():
+        if path in (url, url + "/", "/%s/index.html" % name, "/%s/" % name):
+            return url
+    return path
+
+
 def page(path: str) -> str | None:
     """返回某个路由的完整 HTML（已经注入 bridge 垫片）；没有这个视图就返回 None。"""
+    path = route_for(path)
     name = ROUTES.get(path)
     if not name:
         return None

@@ -724,7 +724,19 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
-        path = urllib.parse.urlparse(self.path).path
+        path = urllib.parse.unquote(urllib.parse.urlparse(self.path).path)
+        # 老书签/相对链接会带出 /她看过什么/index.html 这种路径，统一折回路由
+        if panel_pages is not None:
+            alias = panel_pages.route_for(path)
+            if alias != path:
+                if self._authed():
+                    path = alias
+                else:
+                    self.send_response(302)
+                    self.send_header("Location", "%s?t=%s" % (alias, token()))
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
+                    return
         if path == "/health":
             return self._json({"ok": True, "total": len(load_items()), "ts": time.time()})
         if path.startswith("/__api/"):
