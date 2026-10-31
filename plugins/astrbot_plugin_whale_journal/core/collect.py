@@ -169,6 +169,30 @@ _TEACH_CUES = (
 )
 
 
+def context_of(chat: list[dict], text: str, *, before: int = 6, after: int = 2) -> str:
+    """在一段聊天里找到这句话，把前后几条拼成完整对话（供教学库展示）。"""
+    key = " ".join(str(text or "").split())
+    if not key:
+        return ""
+    idx = -1
+    for i, ln in enumerate(chat or []):
+        if " ".join(str(ln.get("text") or "").split()) == key:
+            idx = i
+            break
+    if idx < 0:
+        return ""
+    out: list[str] = []
+    for ln in (chat or [])[max(0, idx - before): idx + after + 1]:
+        who = str(ln.get("who") or "")
+        name = "大肥鱼" if who in ("我", "她") else str(who or "某人")
+        body = str(ln.get("text") or "").strip()
+        if not body:
+            continue
+        hm = str(ln.get("hm") or "")
+        out.append(f"[{hm}] {name}：{body}" if hm else f"{name}：{body}")
+    return "\n".join(out)
+
+
 def lessons_between(lines: list[dict], limit: int = 6) -> list[dict]:
     """挑出主人在教她东西/立规矩的那几句话（私聊优先，其次群里）。"""
     out: list[dict] = []

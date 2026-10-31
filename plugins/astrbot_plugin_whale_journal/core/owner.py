@@ -17,6 +17,9 @@ from pathlib import Path
 from typing import Any
 
 CATEGORIES = ("黑话", "梗", "调情", "其他")
+# 主人可以自己加分类，存在 lessons.json 的 custom_categories 里
+_TRASH_DAYS = 30
+_MAX_CONTEXT_CHARS = 1200
 
 # 总结里禁止出现的生造词/半文不白说法 → 换成主人一眼能懂的口语
 _PLAIN_WORDS = {
@@ -68,9 +71,55 @@ def normalize_category(v: Any) -> str:
     return alias.get(low, "其他")
 
 
+def _clip_context(text: Any) -> str:
+    """把一段对话上下文压到可存的长度（保留头尾，中间省略）。"""
+    s = "\n".join(line.strip() for line in str(text or "").splitlines() if line.strip())
+    if len(s) <= _MAX_CONTEXT_CHARS:
+        return s
+    head = s[: int(_MAX_CONTEXT_CHARS * 0.6)]
+    tail = s[-int(_MAX_CONTEXT_CHARS * 0.3):]
+    return head + "\n……\n" + tail
+
+
 def _lesson_id(text: str, category: str) -> str:
     h = hashlib.sha1(f"{category}|{text}".encode("utf-8")).hexdigest()[:12]
     return h
+
+
+def lessons_block(items: list[dict], limit: int = 40, max_chars: int = 4000) -> str:
+    """把教学库条目拼成给模型看的提示块（让她真能听懂黑话/梗）。"""
+    lines: list[str] = []
+    for it in items or []:
+        if not isinstance(it, dict):
+            continue
+        txt = str(it.get("text") or "").strip()
+        if not txt:
+            continue
+        cat = str(it.get("category") or "其他")
+        note = str(it.get("note") or "").strip()
+        ctx = str(it.get("context") or "").strip()
+        extra = ""
+        if note:
+            extra = f"（意思：{note}）"
+        elif ctx:
+            # 从完整对话里挑主人解释它的那一句
+            for ln in ctx.splitlines():
+                if "主人：" in ln and len(ln) > len(txt) + 4:
+                    extra = f"（当时主人说：{ln.split('主人：', 1)[1].strip()[:60]}）"
+                    break
+        lines.append(f"- 【{cat}】{txt}{extra}")
+        if len(lines) >= max(1, int(limit)):
+            break
+    if not lines:
+        return ""
+    block = (
+        "\n\n【主人教过你的东西（你要真的懂，不要问，也不要说你不知道）】\n"
+        "下面是主人亲口教你的词、梗、规矩。聊天里出现这些词时，按这里的含义理解，"
+        "顺着他的意思回，别装听不懂：\n" + "\n".join(lines)
+    )
+    if len(block) > max_chars:
+        block = block[:max_chars] + "\n……（还有更多，需要时用记忆回想）"
+    return block
 
 
 # --------------------------------------------------------------------------- #
@@ -228,11 +277,11 @@ class LessonBook:
         tmp.replace(self.path)
 
     def add(self, text: str, category: str = "其他", *, note: str = "", source: str = "chat",
-            day: str = "") -> dict[str, Any] | None:
+            day: str = "", context: str = "") -> dict[str, Any] | None:
         text = " ".join(str(text or "").split())[:_MAX_LESSON_CHARS]
         if len(text) < 2:
             return None
-        cat = normalize_category(category)
+        cat = self.coerce_category(category)
         data = self.load()
         items = data.get("items") or []
         lid = _lesson_id(text, cat)
@@ -243,6 +292,8 @@ class LessonBook:
                 it["hits"] = int(it.get("hits") or 1) + 1
                 if note and not it.get("note"):
                     it["note"] = note
+                if context and len(str(context)) > len(str(it.get("context") or "")):
+                    it["context"] = _clip_context(context)
                 self.save(data)
                 return it
         item = {
@@ -254,6 +305,7 @@ class LessonBook:
             "note": str(note or "").strip()[:200],
             "source": source,
             "hits": 1,
+            "context": _clip_context(context),
         }
         items.append(item)
         data["items"] = items[-800:]
@@ -269,19 +321,154 @@ class LessonBook:
             if not isinstance(p, dict):
                 continue
             if self.add(p.get("text") or p.get("content") or "", p.get("category") or "其他",
-                        note=p.get("note") or "", source=source, day=day):
+                        note=p.get("note") or "", source=source, day=day,
+                        context=p.get("context") or ""):
                 n += 1
         return n
+
+    # ---------------- 分类管理 ----------------
+    def categories(self) -> list[str]:
+        """基础四类 + 主人自定义的分类（保持添加顺序、去重）。"""
+        data = self.load()
+        extra = data.get("custom_categories") or []
+        out = list(CATEGORIES)
+        for c in extra:
+            c = str(c or "").strip()
+            if c and c not in out:
+                out.append(c)
+        return out
+
+    def coerce_category(self, v: Any) -> str:
+        """把任意输入落成一个合法分类：认识的保留，不认识但像名字的自定义，其余归「其他」。"""
+        s = str(v or "").strip()
+        if not s:
+            return "其他"
+        cats = self.categories()
+        if s in cats:
+            return s
+        # 明确说了基础类别
+        for c in CATEGORIES:
+            if c in s:
+                return c
+        # 自定义名：短一点、像名字就收
+        if 1 <= len(s) <= 12 and not s.isdigit():
+            return s
+        return "其他"
+
+    def add_category(self, name: str) -> dict[str, Any]:
+        name = " ".join(str(name or "").split())[:12]
+        if not name:
+            return {"ok": False, "message": "分类名不能空"}
+        data = self.load()
+        extra = [str(c) for c in (data.get("custom_categories") or []) if str(c).strip()]
+        if name in CATEGORIES or name in extra:
+            return {"ok": False, "message": "这个分类已经有了", "categories": self.categories()}
+        extra.append(name)
+        data["custom_categories"] = extra
+        data["version"] = 1
+        self.save(data)
+        return {"ok": True, "categories": self.categories()}
+
+    def set_category(self, lid: str, category: str) -> dict[str, Any]:
+        lid = str(lid or "").strip()
+        cat = self.coerce_category(category)
+        data = self.load()
+        for it in data.get("items") or []:
+            if str(it.get("id")) == lid:
+                it["category"] = cat
+                self.save(data)
+                return {"ok": True, "item": it, "categories": self.categories()}
+        return {"ok": False, "message": "没找到这条"}
+
+    # ---------------- 删除 / 回收站 ----------------
+    def delete(self, lid: str) -> dict[str, Any]:
+        lid = str(lid or "").strip()
+        data = self.load()
+        items = data.get("items") or []
+        for i, it in enumerate(items):
+            if str(it.get("id")) == lid:
+                gone = items.pop(i)
+                gone["deleted_ts"] = _now_iso()
+                gone["deleted_at"] = time.time()
+                trash = data.get("trash") or []
+                trash.insert(0, gone)
+                data["items"] = items
+                data["trash"] = trash[:400]
+                self.save(data)
+                return {"ok": True, "message": "已移入回收站，30 天内可以还原"}
+        return {"ok": False, "message": "没找到这条"}
+
+    def restore(self, lid: str) -> dict[str, Any]:
+        lid = str(lid or "").strip()
+        data = self.load()
+        trash = data.get("trash") or []
+        for i, it in enumerate(trash):
+            if str(it.get("id")) == lid:
+                back = trash.pop(i)
+                back.pop("deleted_ts", None)
+                back.pop("deleted_at", None)
+                items = data.get("items") or []
+                items.append(back)
+                data["items"] = items
+                data["trash"] = trash
+                self.save(data)
+                return {"ok": True, "item": back, "message": "还原好了"}
+        return {"ok": False, "message": "回收站里没有这条（可能已过期自动清了）"}
+
+    def purge_trash(self, days: int = _TRASH_DAYS) -> int:
+        """清掉超过 days 天的回收站条目，返回清掉几条。"""
+        data = self.load()
+        trash = data.get("trash") or []
+        if not trash:
+            return 0
+        cutoff = time.time() - max(1, int(days)) * 86400
+        keep: list[dict] = []
+        for it in trash:
+            try:
+                ts = float(it.get("deleted_at") or 0)
+            except (TypeError, ValueError):
+                ts = 0.0
+            if ts and ts < cutoff:
+                continue
+            keep.append(it)
+        if len(keep) != len(trash):
+            data["trash"] = keep
+            self.save(data)
+        return len(trash) - len(keep)
+
+    def trash_view(self, days: int = _TRASH_DAYS) -> list[dict[str, Any]]:
+        self.purge_trash(days)
+        data = self.load()
+        out: list[dict[str, Any]] = []
+        now = time.time()
+        for it in data.get("trash") or []:
+            try:
+                ts = float(it.get("deleted_at") or 0)
+            except (TypeError, ValueError):
+                ts = 0.0
+            left = max(0, int(days - (now - ts) / 86400)) if ts else days
+            out.append({
+                "id": str(it.get("id") or ""),
+                "text": str(it.get("text") or ""),
+                "category": self.coerce_category(it.get("category")),
+                "context": str(it.get("context") or ""),
+                "deleted_ts": str(it.get("deleted_ts") or ""),
+                "days_left": left,
+            })
+        return out
 
     def stats(self) -> dict[str, Any]:
         data = self.load()
         items = data.get("items") or []
-        counts = {c: 0 for c in CATEGORIES}
+        counts = {c: 0 for c in self.categories()}
         for it in items:
-            counts[normalize_category(it.get("category"))] = counts.get(normalize_category(it.get("category")), 0) + 1
-        return {"total": len(items), "counts": counts}
+            c = self.coerce_category(it.get("category"))
+            counts[c] = counts.get(c, 0) + 1
+        return {"total": len(items), "counts": counts, "trash": len(data.get("trash") or [])}
 
     def view(self, limit: int = 400, q: str = "") -> dict[str, Any]:
+        cats = self.categories()
+        self.purge_trash()
         data = self.load()
         items = list(data.get("items") or [])
         items.sort(key=lambda it: str(it.get("ts") or ""), reverse=True)
@@ -293,12 +480,14 @@ class LessonBook:
                      or q in str(it.get("category", "")).lower()]
         items = items[:limit]
         for it in items:
-            it["category"] = normalize_category(it.get("category"))
-        groups = {c: [it for it in items if it["category"] == c] for c in CATEGORIES}
+            it["category"] = self.coerce_category(it.get("category"))
+        groups = {c: [it for it in items if it["category"] == c] for c in cats}
         return {
             "total": len(items),
             "counts": {c: len(v) for c, v in groups.items()},
-            "groups": [{"category": c, "items": groups[c]} for c in CATEGORIES],
+            "categories": cats,
+            "groups": [{"category": c, "items": groups[c]} for c in cats],
+            "trash": self.trash_view(),
         }
 
     # ---------------- 从聊天里认「这是哪一类」 ----------------

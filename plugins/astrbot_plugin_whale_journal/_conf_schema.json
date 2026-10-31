@@ -103,5 +103,15 @@
     "default": 6,
     "description": "画像最短更新间隔（小时）",
     "hint": "默认 6 小时算一次，最少 1"
+  },
+  "lessons_inject_enable": {
+    "type": "bool",
+    "description": "把主人教过的黑话/梗/调情注入她的提示词（让她真听懂）",
+    "default": true
+  },
+  "lessons_inject_limit": {
+    "type": "int",
+    "description": "最多注入多少条教学",
+    "default": 40
   }
 }

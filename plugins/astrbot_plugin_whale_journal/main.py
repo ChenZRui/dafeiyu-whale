@@ -28,11 +28,15 @@ from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star
 from astrbot.core import AstrBotConfig
 
-from .core.collect import BiliCollector, ChatCollector, guess_mistakes, lessons_between
+from .core.collect import BiliCollector, ChatCollector, context_of, guess_mistakes, lessons_between
 from .core.config import JournalConfig
 from .core.llm import JournalLLM
-from .core.owner import LessonBook, OwnerProfile
+from .core.owner import LessonBook, OwnerProfile, lessons_block
 from .core.store import JournalStore
+
+# 每个会话最近几条消息，用来自动收教学时补「完整对话」
+_RECENT_LINES: dict[str, list[tuple[str, str]]] = {}
+_RECENT_KEEP = 12
 
 TZ = timezone(timedelta(hours=8))
 
@@ -193,7 +197,7 @@ class WhaleJournalPlugin(Star):
                 f"{len(chat)} 条对话 / {len(videos)} 个视频｜{entry['body'][:40]}……"
             )
             # 日记里出现的「主人教我的」→ 分好类存进 lessons.json
-            await self._absorb_lessons(lessons, entry["day"])
+            await self._absorb_lessons(lessons, entry["day"], chat)
             # 顺便更新主人画像（默认 6 小时最多算一次）
             await self.maybe_profile()
             await self._push_after_write()
@@ -205,8 +209,13 @@ class WhaleJournalPlugin(Star):
             self._running = False
 
     # ------------------------------------------------------------ 主人画像 / 教我的
-    async def _absorb_lessons(self, lessons: list[dict], day: str) -> None:
-        """把这段时间学到的规矩按黑话/梗/调情/其他分类入库。"""
+    @staticmethod
+    def _context_of(chat: list[dict], text: str) -> str:
+        return context_of(chat, text)
+
+    async def _absorb_lessons(self, lessons: list[dict], day: str,
+                              chat: list[dict] | None = None) -> None:
+        """把这段时间学到的规矩按分类入库（带上完整对话）。"""
         if not lessons:
             return
         pairs: list[dict] = []
@@ -216,6 +225,19 @@ class WhaleJournalPlugin(Star):
             logger.warning(f"[whale-journal] 分类失败，先都记成「其他」：{e}")
         if not pairs:
             pairs = [{"text": l.get("text", ""), "category": "其他"} for l in lessons]
+        # 给每一条补上「这句话前后在聊什么」
+        for p in pairs:
+            txt = str(p.get("text") or "")
+            if not txt:
+                continue
+            for l in lessons:
+                old = str(l.get("text") or "")
+                if txt and (txt in old or old in txt):
+                    ctx = self._context_of(chat or [], old)
+                    if ctx:
+                        p["context"] = ctx
+                        p["note"] = p.get("note") or str(l.get("where") or "")
+                    break
         n = self.lessons.add_many(pairs, source="diary", day=day)
         if n:
             stats = self.lessons.stats()
@@ -426,7 +448,10 @@ class WhaleJournalPlugin(Star):
                 "也可以直接说「记住，这是黑话：xxx」，我自己分。"
             )
             return
-        item = self.lessons.add(text, cat, source="qq", day=datetime.now(TZ).date().isoformat())
+        umo = str(getattr(event, "unified_msg_origin", "") or "")
+        ctx = "\n".join(f"{w}：{t}" for w, t in (_RECENT_LINES.get(umo) or [])[-8:])
+        item = self.lessons.add(text, cat, source="qq",
+                                day=datetime.now(TZ).date().isoformat(), context=ctx)
         if not item:
             yield event.plain_result("这句太短了，记不住。")
             return
@@ -435,6 +460,26 @@ class WhaleJournalPlugin(Star):
             f"记下了（{item['category']}）：{item['text']}\n现在一共 {stats['total']} 条，"
             f"黑话 {stats['counts']['黑话']}／梗 {stats['counts']['梗']}／调情 {stats['counts']['调情']}"
         )
+
+    # ------------------------------------------------------------ 反向读取：她要知道「啥是啥」
+    @filter.on_llm_request()
+    async def inject_lessons(self, event: AstrMessageEvent, req=None):
+        """把主人教过的黑话/梗/调情塞进 system prompt，让她听懂并照着回。"""
+        try:
+            if req is None or not self.cfg.lessons_inject_enable:
+                return
+            data = self.lessons.view(limit=max(1, int(self.cfg.lessons_inject_limit)))
+            items: list[dict] = []
+            for g in data.get("groups") or []:
+                items.extend(g.get("items") or [])
+            block = lessons_block(items, limit=int(self.cfg.lessons_inject_limit))
+            if not block:
+                return
+            cur = getattr(req, "system_prompt", "") or ""
+            if "主人教过你的东西" not in cur:
+                req.system_prompt = cur + block
+        except Exception as e:
+            logger.warning(f"[whale-journal] 教学库注入失败：{e}")
 
     @filter.event_message_type(filter.EventMessageType.ALL)
     async def auto_teach(self, event: AstrMessageEvent):
@@ -446,6 +491,10 @@ class WhaleJournalPlugin(Star):
             umo = str(event.unified_msg_origin or "")
             if self.cfg.owner_qq and self.cfg.owner_qq not in umo:
                 return
+            # 先记进最近对话缓存，收教学时当上下文用
+            buf = _RECENT_LINES.setdefault(umo, [])
+            buf.append(("主人", text))
+            del buf[:-_RECENT_KEEP]
             cat = LessonBook.detect_category(text)
             if not cat:
                 return
@@ -454,8 +503,9 @@ class WhaleJournalPlugin(Star):
             body = LessonBook.strip_category_words(text)
             if len(body) < 2:
                 return
+            ctx = "\n".join(f"{w}：{t}" for w, t in (_RECENT_LINES.get(umo) or [])[-8:])
             item = self.lessons.add(body, cat, source="qq-chat",
-                                    day=datetime.now(TZ).date().isoformat())
+                                    day=datetime.now(TZ).date().isoformat(), context=ctx)
             if item:
                 logger.info(f"[whale-journal] 聊天里学到一条（{item['category']}）：{item['text'][:40]}")
         except Exception as e:

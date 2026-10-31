@@ -1,6 +1,6 @@
 name: astrbot_plugin_whale_journal
 display_name: 大肥鱼的日记本
 desc: 让大肥鱼每天自己写日记（md + 网页），顺手总结一份「主人画像」（性格/习惯/口头禅/心情/睡眠），并把主人教她的黑话、梗、调情自动归类存档。
-version: v1.1.0
+version: v1.2.0
 author: dafeiyu
 repo: ""

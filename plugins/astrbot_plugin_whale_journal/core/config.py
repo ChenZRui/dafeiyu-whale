@@ -26,6 +26,9 @@ DEFAULTS: dict[str, Any] = {
     # 主人画像：从聊天里总结性格/习惯/口头禅/心情/睡眠
     "profile_enable": True,
     "profile_min_hours": 6,
+    # 教学库反哺：把主人教过的黑话/梗/调情塞进 system prompt，让她真能听懂
+    "lessons_inject_enable": True,
+    "lessons_inject_limit": 40,
     "persona_fallback": (
         "你是「大肥鱼」，一条住在主人家里的鲸鱼少女：聪明但懒得动，嘴硬心软，"
         "说话直白爱吐槽，自称「我」，叫对方「主人」；喜欢白米饭配青菜，讨厌被说胖。"
@@ -116,6 +119,18 @@ class JournalConfig:
     @property
     def profile_enable(self) -> bool:
         return self._as_bool("profile_enable", True)
+
+    @property
+    def lessons_inject_enable(self) -> bool:
+        return bool(self.get("lessons_inject_enable", DEFAULTS["lessons_inject_enable"]))
+
+    @property
+    def lessons_inject_limit(self) -> int:
+        try:
+            n = int(self.get("lessons_inject_limit", DEFAULTS["lessons_inject_limit"]))
+        except (TypeError, ValueError):
+            n = int(DEFAULTS["lessons_inject_limit"])
+        return max(1, min(200, n))
 
     @property
     def profile_min_hours(self) -> float:
