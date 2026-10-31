@@ -201,6 +201,26 @@ def api(endpoint: str, query: dict, body: dict | None = None) -> dict:
             "status": "ok",
             "data": {"enabled": True, "allow_edit": True, "summary": st.summary(), "sources": st.status()},
         }
+    if endpoint == "lessons/add_category" and body is not None:
+        result = st.add_lesson_category(str(body.get("name") or ""))
+        if not result.get("ok"):
+            return {"status": "error", "message": str(result.get("message") or "加不上")}
+        return {"status": "ok", "data": result}
+    if endpoint == "lessons/set_category" and body is not None:
+        result = st.set_lesson_category(str(body.get("id") or ""), str(body.get("category") or ""))
+        if not result.get("ok"):
+            return {"status": "error", "message": str(result.get("message") or "改不了")}
+        return {"status": "ok", "data": result}
+    if endpoint == "lessons/delete" and body is not None:
+        result = st.delete_lesson(str(body.get("id") or ""))
+        if not result.get("ok"):
+            return {"status": "error", "message": str(result.get("message") or "删不了")}
+        return {"status": "ok", "data": result}
+    if endpoint == "lessons/restore" and body is not None:
+        result = st.restore_lesson(str(body.get("id") or ""))
+        if not result.get("ok"):
+            return {"status": "error", "message": str(result.get("message") or "还原不了")}
+        return {"status": "ok", "data": result}
     if endpoint == "rate" and body is not None:
         result = st.rate(
             str(body.get("bvid") or "").strip(),
