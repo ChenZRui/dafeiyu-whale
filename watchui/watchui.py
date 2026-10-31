@@ -28,6 +28,11 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+try:  # 面板页面的桥接：和 AstrBot 面板共用同一份 views，不重复维护两套 HTML
+    import panel_pages  # type: ignore
+except Exception:  # 单文件部署时允许缺这个模块，退回自带渲染
+    panel_pages = None  # type: ignore
+
 DATA = Path(os.environ.get("WATCHUI_DATA", "/opt/astrbot/data/bili_whale"))
 STATE = DATA / "state.json"
 RATINGS = DATA / "ratings.json"
@@ -698,6 +703,18 @@ class Handler(BaseHTTPRequestHandler):
     def _authed(self) -> bool:
         return self._query().get("t") == token()
 
+    def _panel_api(self, endpoint: str, body: dict | None = None):
+        """给面板视图垫片用的接口：内部直接调面板插件的数据层。"""
+        if not self._authed():
+            return self._json({"status": "error", "message": "口令不对"}, 403)
+        if panel_pages is None:
+            return self._json({"status": "error", "message": "panel_pages 未加载"}, 500)
+        try:
+            payload = panel_pages.api(endpoint.rstrip("/"), self._query(), body)
+        except Exception as e:
+            return self._json({"status": "error", "message": "%s: %s" % (type(e).__name__, e)}, 500)
+        return self._json(payload)
+
     def do_OPTIONS(self):
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -710,6 +727,8 @@ class Handler(BaseHTTPRequestHandler):
         path = urllib.parse.urlparse(self.path).path
         if path == "/health":
             return self._json({"ok": True, "total": len(load_items()), "ts": time.time()})
+        if path.startswith("/__api/"):
+            return self._panel_api(path[len("/__api/"):])
         if path.startswith("/cover/"):
             name = os.path.basename(path[len("/cover/"):])
             f = COVERS / name
@@ -748,15 +767,29 @@ class Handler(BaseHTTPRequestHandler):
                     "</div></body></html>"
                 )
             return self._html("<h3>需要口令</h3>", 403)
+        if path in ("/", "/home", "/watch"):
+            # 四个页面和面板插件共用同一份 views，优先走它（功能一改两边同步）
+            if panel_pages is not None and panel_pages.has_views():
+                if path == "/watch":
+                    html = panel_pages.page("/watch")
+                    if html:
+                        return self._html(html)
+                home = panel_pages.home_page(token())
+                return self._html(home)
         if path in ("/", "/watch"):
             rows = load_items()
             warm_covers(rows)
             return self._html(render(rows, snapshot=False, tk=token()))
-        if path in ("/diary", "/diary/"):
-            if diary_entries is None or render_diary is None:
-                return self._json({"ok": False, "message": "diary_view 未加载"}, 500)
-            rows = diary_entries(DIARY_FILE)
-            return self._html(render_diary(rows, tk=token(), public=public_url()))
+        if path in ("/diary", "/diary/", "/profile", "/lessons"):
+            if panel_pages is not None and panel_pages.has_views():
+                key = "/diary" if path.startswith("/diary") else path
+                html = panel_pages.page(key)
+                if html:
+                    return self._html(html)
+            if path.startswith("/diary") and diary_entries is not None and render_diary is not None:
+                rows = diary_entries(DIARY_FILE)
+                return self._html(render_diary(rows, tk=token(), public=public_url()))
+            return self._json({"ok": False, "message": "面板页面未就绪（检查 panel_pages / views 目录）"}, 500)
         if path == "/diary.json":
             if diary_entries is None:
                 return self._json({"ok": False}, 500)
@@ -774,6 +807,8 @@ class Handler(BaseHTTPRequestHandler):
             data = json.loads(raw.decode("utf-8", "replace") or "{}")
         except Exception:
             return self._json({"ok": False, "message": "坏请求"}, 400)
+        if path.startswith("/__api/"):
+            return self._panel_api(path[len("/__api/"):], data)
         if path == "/rate":
             if self._query().get("t") != token():
                 return self._json({"ok": False, "message": "口令不对"}, 403)

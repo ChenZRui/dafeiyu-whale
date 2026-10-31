@@ -59,6 +59,27 @@ def _persona_prompt(obj: Any) -> str:
     return ""
 
 
+
+def _salvage(txt: str) -> dict:
+    """JSON 解析失败时的兜底：逐字段正则捞回来。
+
+    模型偶尔会在 body 里写没转义的双引号，json.loads 直接失败；
+    以前这种情况会把整段 JSON 原样当正文存进日记，页面上显示成一坨花括号。
+    """
+    raw = _strip_fence(txt)
+    out: dict[str, str] = {}
+    for key in ("mood", "title"):
+        m = re.search(r'"%s"\s*:\s*"([^"]{1,40})"' % key, raw)
+        if m:
+            out[key] = m.group(1).strip()
+    m = re.search(r'"body"\s*:\s*"([\s\S]*?)"\s*[,}]', raw)
+    if m:
+        body = m.group(1)
+        body = body.replace('\\"', '"').replace("\\n", "\n").replace("\\t", "\t")
+        out["body"] = body.strip()
+    return out
+
+
 class JournalLLM:
     def __init__(self, context: Any, cfg):
         self.context = context
@@ -207,6 +228,11 @@ title 是给这段起的一句话小标题（10 字以内），可以留空。""
         if not raw:
             return None
         data = self._parse(raw)
+        if data is None and _strip_fence(raw).lstrip().startswith("{"):
+            # 模型输出的是 JSON，但格式坏了（常见：body 里没转义双引号）
+            data = _salvage(raw) or None
+            if data:
+                logger.info("[whale-journal] LLM 的 JSON 有问题，已按字段捞回")
         if data is None:
             logger.warning(f"[whale-journal] LLM 输出不是 JSON，按纯文本处理：{raw[:120]}")
             body = raw.strip()

@@ -481,3 +481,11 @@ core/
 ## License
 
 MIT
+
+### 2026-10-31 修补（v1.1.1）
+
+- 独立站（`watchui/watchui.py`）改成**和面板插件共用同一份视图**：新增 `watchui/panel_pages.py`，
+  把面板的 `views/<视图>/index.html` 原样发出去，并把 `window.AstrBotPluginView` 桥到 `/__api/...`。
+  以后加页面只改面板那一边，双击 bat 打开的和面板里看到的是同一套东西。
+- 修教学库/日记的时间戳兼容（ISO 字符串也能读）、日记 LLM 坏 JSON 逐字段捞回、
+  深色皮肤下日记页文字看不清、启动器只打开旧打分台的问题（现在打开的是四页菜单）。
