@@ -173,7 +173,7 @@ class OwnerProfile:
             timeline[-1] = snap
         else:
             timeline.append(snap)
-        out["timeline"] = timeline[-20:]
+        out["timeline"] = timeline[-365:]
         return out
 
     # ---------------- 给页面 ----------------
@@ -198,7 +198,7 @@ class OwnerProfile:
             },
             "highlights": p.get("highlights") or [],
             "period": p.get("period") or {},
-            "timeline": [t for t in (p.get("timeline") or []) if isinstance(t, dict)][-20:],
+            "timeline": [t for t in (p.get("timeline") or []) if isinstance(t, dict)][-365:],
             "has_data": bool(p.get("updated_at")),
         }
 
