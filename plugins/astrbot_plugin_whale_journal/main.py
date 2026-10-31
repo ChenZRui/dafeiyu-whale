@@ -238,6 +238,21 @@ class WhaleJournalPlugin(Star):
                         p["context"] = ctx
                         p["note"] = p.get("note") or str(l.get("where") or "")
                     break
+        # 给每条起个小标题 + 一句概述（让卡片像在看聊天，而不是一串原话）
+        for p in pairs:
+            ctx = str(p.get("context") or "")
+            if not ctx:
+                continue
+            try:
+                info = await self.llm.describe_lesson(ctx, str(p.get("text") or ""))
+            except Exception as e:
+                logger.warning(f"[whale-journal] 生成概述失败（不影响入库）：{e}")
+                info = {}
+            if isinstance(info, dict):
+                if info.get("title"):
+                    p["title"] = info["title"]
+                if info.get("gist"):
+                    p["gist"] = info["gist"]
         n = self.lessons.add_many(pairs, source="diary", day=day)
         if n:
             stats = self.lessons.stats()
@@ -450,8 +465,17 @@ class WhaleJournalPlugin(Star):
             return
         umo = str(getattr(event, "unified_msg_origin", "") or "")
         ctx = "\n".join(f"{w}：{t}" for w, t in (_RECENT_LINES.get(umo) or [])[-8:])
+        info: dict = {}
+        if ctx:
+            try:
+                info = await self.llm.describe_lesson(ctx, text)
+            except Exception as e:
+                logger.warning(f"[whale-journal] 生成概述失败（不影响入库）：{e}")
+                info = {}
         item = self.lessons.add(text, cat, source="qq",
-                                day=datetime.now(TZ).date().isoformat(), context=ctx)
+                                day=datetime.now(TZ).date().isoformat(), context=ctx,
+                                title=str(info.get("title") or ""),
+                                gist=str(info.get("gist") or ""))
         if not item:
             yield event.plain_result("这句太短了，记不住。")
             return
@@ -504,8 +528,16 @@ class WhaleJournalPlugin(Star):
             if len(body) < 2:
                 return
             ctx = "\n".join(f"{w}：{t}" for w, t in (_RECENT_LINES.get(umo) or [])[-8:])
+            info2: dict = {}
+            if ctx:
+                try:
+                    info2 = await self.llm.describe_lesson(ctx, body)
+                except Exception:
+                    info2 = {}
             item = self.lessons.add(body, cat, source="qq-chat",
-                                    day=datetime.now(TZ).date().isoformat(), context=ctx)
+                                    day=datetime.now(TZ).date().isoformat(), context=ctx,
+                                    title=str(info2.get("title") or ""),
+                                    gist=str(info2.get("gist") or ""))
             if item:
                 logger.info(f"[whale-journal] 聊天里学到一条（{item['category']}）：{item['text'][:40]}")
         except Exception as e:

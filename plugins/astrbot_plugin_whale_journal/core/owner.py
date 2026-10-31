@@ -277,7 +277,7 @@ class LessonBook:
         tmp.replace(self.path)
 
     def add(self, text: str, category: str = "其他", *, note: str = "", source: str = "chat",
-            day: str = "", context: str = "") -> dict[str, Any] | None:
+            day: str = "", context: str = "", title: str = "", gist: str = "") -> dict[str, Any] | None:
         text = " ".join(str(text or "").split())[:_MAX_LESSON_CHARS]
         if len(text) < 2:
             return None
@@ -294,6 +294,10 @@ class LessonBook:
                     it["note"] = note
                 if context and len(str(context)) > len(str(it.get("context") or "")):
                     it["context"] = _clip_context(context)
+                if title and not it.get("title"):
+                    it["title"] = str(title)[:24]
+                if gist and not it.get("gist"):
+                    it["gist"] = str(gist)[:160]
                 self.save(data)
                 return it
         item = {
@@ -306,6 +310,8 @@ class LessonBook:
             "source": source,
             "hits": 1,
             "context": _clip_context(context),
+            "title": str(title or "")[:24],
+            "gist": str(gist or "")[:160],
         }
         items.append(item)
         data["items"] = items[-800:]
@@ -322,7 +328,8 @@ class LessonBook:
                 continue
             if self.add(p.get("text") or p.get("content") or "", p.get("category") or "其他",
                         note=p.get("note") or "", source=source, day=day,
-                        context=p.get("context") or ""):
+                        context=p.get("context") or "",
+                        title=p.get("title") or "", gist=p.get("gist") or ""):
                 n += 1
         return n
 

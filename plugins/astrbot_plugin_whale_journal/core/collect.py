@@ -169,6 +169,42 @@ _TEACH_CUES = (
 )
 
 
+_NOISE_HINTS = (
+    "【系统任务",
+    "【情景分析",
+    "【行动指南",
+    "【最终指令",
+    "你被授权在私聊中",
+    "你的回复必须完全符合",
+    "请综合以上所有信息",
+    "当前时间是：",
+    "回顾我们的聊天记录",
+    "可以直接表达我想他",
+    "[系统任务",
+    "系统任务：",
+    "用户原话：",
+    "这是普通聊天",
+    "不要提及图片库",
+    "[BiliBili",
+)
+
+
+def is_prompt_noise(text: Any) -> bool:
+    """判断这一行是不是插件/提示词塞进去的假聊天（不是人说的）。"""
+    s = " ".join(str(text or "").split())
+    if not s:
+        return True
+    hits = sum(1 for h in _NOISE_HINTS if h in s)
+    if hits:
+        return True
+    # 长篇的「第 X 条规则 / 你要扮演」这类模板话
+    if len(s) > 160 and ("规则" in s or "扮演" in s or "指令" in s):
+        return True
+    if s.startswith("- ") and len(s) > 80:
+        return True
+    return False
+
+
 def context_of(chat: list[dict], text: str, *, before: int = 6, after: int = 2) -> str:
     """在一段聊天里找到这句话，把前后几条拼成完整对话（供教学库展示）。"""
     key = " ".join(str(text or "").split())
@@ -182,15 +218,17 @@ def context_of(chat: list[dict], text: str, *, before: int = 6, after: int = 2) 
     if idx < 0:
         return ""
     out: list[str] = []
-    for ln in (chat or [])[max(0, idx - before): idx + after + 1]:
+    window = (chat or [])[max(0, idx - before): idx + after + 1]
+    for ln in window:
         who = str(ln.get("who") or "")
         name = "大肥鱼" if who in ("我", "她") else str(who or "某人")
-        body = str(ln.get("text") or "").strip()
-        if not body:
+        body = " ".join(str(ln.get("text") or "").split())
+        if not body or is_prompt_noise(body):
             continue
-        hm = str(ln.get("hm") or "")
-        out.append(f"[{hm}] {name}：{body}" if hm else f"{name}：{body}")
-    return "\n".join(out)
+        if name == "某人":
+            continue
+        out.append(f"{name}：{body[:120]}")
+    return "\n".join(out[-8:])
 
 
 def lessons_between(lines: list[dict], limit: int = 6) -> list[dict]:

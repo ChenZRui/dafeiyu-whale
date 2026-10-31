@@ -294,6 +294,56 @@ title 是给这段起的一句话小标题（10 字以内），可以留空。""
             return None
         return self._parse(raw)
 
+    async def describe_lesson(self, context: str, text: str) -> dict:
+        """把「一句话 + 前后对话」概括成 {title, gist}，给教学库当卡片标题和概述。
+
+        title：6~14 字的小标题，像给这段聊天起名（例：康神开播了，真的假的）
+        gist ：一到两句复述前因后果，写清谁说了什么、她该懂什么（≤120 字）
+        """
+        ctx = "\n".join(
+            ln for ln in str(context or "").splitlines() if ln.strip()
+        )[:1200]
+        if not ctx:
+            return {}
+        prompt = f"""下面是一段聊天记录（主人和「大肥鱼」），其中有一句话被主人当成「要教给她的东西」。
+
+【聊天记录】
+{ctx}
+
+【被收录的那句话】
+{str(text or "")[:160]}
+
+请输出 JSON：
+{{"title": "给这段聊天起的短标题，6~14 字，像人话，不要书名号、不要句号",
+  "gist": "一到两句复述这段对话的前因后果：主人说了什么、她该回什么/该懂什么；用「主人：…；大肥鱼：…」这种口吻，不要照抄整段，≤120 字"}}
+
+例子：聊天是「主人：康神开播了 / 主人：你应该回真的假的 / 大肥鱼：真的假的（）行，是这个口令对吧」
+则 title=「康神开播了，真的假的」，gist=「主人说康神开播了，教她这时候要接一句「真的假的」，她回：真的假的（）行，是这个口令对吧。」
+
+只输出 JSON。"""
+        system = await self._with_persona(_HARD_RULES)
+        raw = await self.complete(system, prompt)
+        if not raw:
+            return {}
+        txt = _strip_fence(raw)
+        m = re.search(r"\{.*\}", txt, re.S)
+        if not m:
+            return {}
+        try:
+            obj = json.loads(m.group(0))
+        except ValueError:
+            return {}
+        if not isinstance(obj, dict):
+            return {}
+        title = " ".join(str(obj.get("title") or "").split())[:24]
+        gist = " ".join(str(obj.get("gist") or "").split())[:160]
+        out: dict = {}
+        if title:
+            out["title"] = title
+        if gist:
+            out["gist"] = gist
+        return out
+
     async def classify_lessons(self, lessons: list[dict]) -> list[dict]:
         """把「主人教的东西」分到黑话 / 梗 / 调情 / 其他。"""
         texts = [str(l.get("text") or "").strip() for l in (lessons or []) if str(l.get("text") or "").strip()]
