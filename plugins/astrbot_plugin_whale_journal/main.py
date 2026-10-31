@@ -246,7 +246,11 @@ class WhaleJournalPlugin(Star):
             if not fresh:
                 logger.warning("[whale-journal] 画像没生成出来（LLM 空输出）")
                 return None
-            merged = self.profile.merge(prev, fresh, days=1)
+            period = {
+                "start": time.strftime("%Y-%m-%d", time.localtime(now - 24 * 3600)),
+                "end": time.strftime("%Y-%m-%d", time.localtime(now)),
+            }
+            merged = self.profile.merge(prev, fresh, days=1, period=period)
             merged["updated_ts"] = now
             self.profile.save(merged)
             logger.info(

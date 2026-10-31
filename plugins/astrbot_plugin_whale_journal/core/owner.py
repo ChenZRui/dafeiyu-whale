@@ -18,6 +18,23 @@ from typing import Any
 
 CATEGORIES = ("黑话", "梗", "调情", "其他")
 
+# 总结里禁止出现的生造词/半文不白说法 → 换成主人一眼能懂的口语
+_PLAIN_WORDS = {
+    "松快": "放松",
+    "绷着": "紧张",
+    "膈应": "别扭",
+    "随心所欲": "想干啥干啥",
+}
+
+
+def _plain(text: str) -> str:
+    """把后半古半土的词换成正常口语，保证主人看得懂。"""
+    out = str(text or "")
+    for bad, good in _PLAIN_WORDS.items():
+        out = out.replace(bad, good)
+    return out
+
+
 # 口头禅/黑话这类短句，超过这个长度大概率不是口头禅
 _MAX_LESSON_CHARS = 160
 
@@ -105,14 +122,15 @@ class OwnerProfile:
         tmp.replace(self.path)
 
     # ---------------- 合并 ----------------
-    def merge(self, prev: dict[str, Any], fresh: dict[str, Any], *, days: int = 1) -> dict[str, Any]:
+    def merge(self, prev: dict[str, Any], fresh: dict[str, Any], *, days: int = 1,
+              period: dict[str, str] | None = None) -> dict[str, Any]:
         """把 LLM 这轮的结论并进旧画像：列表去重后保留最新的，心情/睡眠以新一轮为准。"""
         out = dict(prev or _PROFILE_EMPTY)
         for key in ("personality", "habits", "catchphrases"):
             merged = _as_list(fresh.get(key)) + [v for v in _as_list(prev.get(key)) if v not in _as_list(fresh.get(key))]
             out[key] = merged[:12]
         out["highlights"] = _as_list(fresh.get("highlights"))[:8]
-        out["summary"] = str(fresh.get("summary") or prev.get("summary") or "").strip()[:600]
+        out["summary"] = _plain(str(fresh.get("summary") or prev.get("summary") or "").strip())[:600]
 
         mood = fresh.get("mood") if isinstance(fresh.get("mood"), dict) else {}
         try:
@@ -121,8 +139,8 @@ class OwnerProfile:
             index = 0
         out["mood"] = {
             "index": max(0, min(10, index)),
-            "label": str(mood.get("label") or "").strip()[:20],
-            "note": str(mood.get("note") or "").strip()[:200],
+            "label": _plain(str(mood.get("label") or "").strip())[:20],
+            "note": _plain(str(mood.get("note") or "").strip())[:200],
         }
         sleep = fresh.get("sleep") if isinstance(fresh.get("sleep"), dict) else {}
         out["sleep"] = {
@@ -131,6 +149,31 @@ class OwnerProfile:
         }
         out["updated_at"] = _now_iso()
         out["days_covered"] = int(prev.get("days_covered") or 0) + max(1, days)
+
+        # 时间段：总结会随主人作息/忙闲变化，所以每条总结都带时间标签，并留一条时间线
+        period = period or {}
+        start = str(period.get("start") or (prev.get("period") or {}).get("start") or "").strip()[:10]
+        end = str(period.get("end") or (prev.get("period") or {}).get("end") or "").strip()[:10]
+        if end:
+            out["period"] = {"start": start or end, "end": end}
+
+        timeline = [t for t in (prev.get("timeline") or []) if isinstance(t, dict)]
+        snap = {
+            "start": out["period"]["start"] if out.get("period") else (start or end),
+            "end": end,
+            "days": max(1, days),
+            "summary": out["summary"],
+            "mood_index": out["mood"]["index"],
+            "mood_label": out["mood"]["label"],
+            "sleep": out["sleep"]["quality"],
+            "updated_at": out["updated_at"],
+        }
+        # 同一天同一段不重复堆，内容变了就顶上
+        if timeline and timeline[-1].get("end") == snap["end"]:
+            timeline[-1] = snap
+        else:
+            timeline.append(snap)
+        out["timeline"] = timeline[-20:]
         return out
 
     # ---------------- 给页面 ----------------
@@ -154,6 +197,8 @@ class OwnerProfile:
                 "note": (p.get("sleep") or {}).get("note") or "",
             },
             "highlights": p.get("highlights") or [],
+            "period": p.get("period") or {},
+            "timeline": [t for t in (p.get("timeline") or []) if isinstance(t, dict)][-20:],
             "has_data": bool(p.get("updated_at")),
         }
 
