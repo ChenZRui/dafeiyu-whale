@@ -794,8 +794,15 @@ class WhalePipeline:
                         card_ok = bool((shared or {}).get("ok"))
                     except BiliError as e:
                         logger.warning(f"[bili-whale] 视频卡片没发成，退回文本：{e}")
-                # 卡片（封面图）已经发过，文字里就不必再贴裸链接
-                body = dm_text if card_ok else f"{video.get('url','')}\n{dm_text}"
+                # 默认只发链接（封面图在手机上点不开，主人还得自己搜）
+                title = str(video.get("title") or "").strip()
+                url = str(video.get("url") or "").strip()
+                if card_ok:
+                    body = dm_text
+                else:
+                    head = f"{title}\n{url}".strip() if title else url
+                    body = f"{head}\n{dm_text}".strip()
+                    logger.info(f"[bili-whale] B站私信按链接方式发送：{url}")
                 await self.bili.send_dm(self.cfg.owner_bili_mid, body)
                 out["dm"] = {"ok": True, "text": dm_text, "card": card_ok}
             except BiliError as e:

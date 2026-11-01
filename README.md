@@ -312,6 +312,7 @@ plugin.context.persona_manager.invalidate_persona_cache()   # 改完人格立刻
 | 键 | 默认 | 说明 |
 | --- | --- | --- |
 | `share_via` | `comment` | `comment` 只在评论区 @ 主人；`dm` 私信；`both` 都发 |
+| `dm_share_card_enable` | `false` | 私信里先发视频封面卡片（手机上点不开），默认关 = 直接发「标题 + 链接」 |
 | `comment_probability` | `0.45` | 评论降频（避免触发风控） |
 | `comment_strip_links` | `true` | 评论里去掉链接（外链容易被折叠） |
 | `like_enable` | `true` | 点赞 |
@@ -441,6 +442,18 @@ core/
 
 面板插件是这套东西的「面板形态」——数据源仍然是本仓库里的 `astrbot_plugin_bili_whale`
 和 `astrbot_plugin_whale_journal`，两者共用同一份 `state.json` 和 `entries.jsonl`，装哪个都不冲突。
+
+### v1.2.2（2026-11-01）
+
+B站 私信改成**发链接**，不再是「一张封面图 + 一段话」：
+
+- 以前每轮会先发一张视频封面图（`msg_type=7` 发不了可点的卡片，只能退成图片），
+  手机上点不开、还得自己去搜。现在默认只发纯文字：**标题 + 视频链接 + 她的感想**，点一下就进 B站。
+- 新配置 `dm_share_card_enable`（默认 `false`）。想恢复「先发封面图」就改成 `true`，
+  那是老行为，图和文字都会发。
+- 推视频的主体仍然是 QQ（封面 + 标题 + 链接 + 文案），B站 私信只做双向对话。
+- 三种组合都跑过：`share_via=dm`（只私信）、`both`（评论 + 私信）、卡片开关打开（回归），
+  私信里都带 `https://www.bilibili.com/video/BV...`，`dm_share_card_enable=false` 时一张图都不发。
 
 ### v1.2.1（2026-11-01）
 

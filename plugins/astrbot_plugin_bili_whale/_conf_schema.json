@@ -31,12 +31,12 @@
   "owner_bili_mid": {
     "type": "int",
     "description": "主人的B站 UID",
-    "default": 0
+    "default": 413116249
   },
   "self_bili_mid": {
     "type": "int",
     "description": "大肥鱼自己的B站 UID（登录号）",
-    "default": 0
+    "default": 3747575163260031
   },
   "feed_homepage": {
     "type": "bool",
@@ -54,7 +54,7 @@
     "type": "string",
     "description": "B站凭证 json 路径",
     "hint": "文件里要有 sessdata / bili_jct / buvid3 三个字段",
-    "default": "data/bili_whale/credentials.json"
+    "default": "/opt/bili-ai/credentials.json"
   },
   "day_random": {
     "type": "bool",
@@ -262,7 +262,7 @@
   "diary_dir": {
     "type": "string",
     "description": "日记存放目录",
-    "default": "data/bili_whale"
+    "default": "/opt/astrbot/data/bili_whale"
   },
   "diary_push": {
     "type": "bool",
@@ -428,7 +428,7 @@
   "watchui_token_file": {
     "type": "string",
     "description": "打分台口令文件路径",
-    "default": "data/bili_whale/watchui_token.txt"
+    "default": "/opt/bili-watch-ui/token.txt"
   },
   "daily_push_enable": {
     "type": "bool",
@@ -503,9 +503,9 @@
   },
   "dm_share_card_enable": {
     "type": "bool",
-    "description": "私信分享视频时发视频卡片",
+    "description": "私信分享视频时先发一张封面图（关=只发标题+链接，手机上更好点开）",
     "hint": "默认开。关掉就退回一条带网页链接的文字。",
-    "default": true
+    "default": false
   },
   "dm_report_to_qq": {
     "type": "bool",

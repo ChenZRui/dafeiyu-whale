@@ -26,9 +26,9 @@ DEFAULTS: dict[str, Any] = {
     "group_ids": [],
     "group_share_enable": True,
     "share_via": "comment",
-    "owner_bili_mid": 0,
-    "self_bili_mid": 0,
-    "bili_credential_file": "data/bili_whale/credentials.json",
+    "owner_bili_mid": 413116249,
+    "self_bili_mid": 3747575163260031,
+    "bili_credential_file": "/opt/bili-ai/credentials.json",
     "day_random": False,
     "plan_cron": "0 5 * * *",
     "day_windows": [
@@ -64,7 +64,7 @@ DEFAULTS: dict[str, Any] = {
     "qq_share_enable": True,
     "qq_share_max_chars": 800,
     "diary_enable": True,
-    "diary_dir": "data/bili_whale",
+    "diary_dir": "/opt/astrbot/data/bili_whale",
     "diary_push": True,
     "comment_digest_enable": True,
     "at_listen_enable": True,
@@ -105,7 +105,7 @@ DEFAULTS: dict[str, Any] = {
     "feedback_penalty": 5.0,
     # ---- 打分台（独立小服务）+ 每天定时把打分文件发到 QQ ----
     "watchui_url": "http://127.0.0.1:18900",
-    "watchui_token_file": "data/bili_whale/watchui_token.txt",
+    "watchui_token_file": "/opt/bili-watch-ui/token.txt",
     "daily_push_enable": True,
     "daily_push_cron": "0 21 * * *",
     "daily_push_file": "大肥鱼看过什么.html",
@@ -113,7 +113,7 @@ DEFAULTS: dict[str, Any] = {
     "daily_push_send_file": True,
     "topic_weight_enable": True,
     # 私信分享视频时发「视频卡片」（不是一条带网址的文本）；失败自动退回文本
-    "dm_share_card_enable": True,
+    "dm_share_card_enable": False,
     # 私信往来是否复述到 QQ（默认关：主人自己在B站看得到）
     "dm_report_to_qq": False,
     # 主人在 B站 私信里推视频过来时，她要不要「看完并回一段评价」
@@ -218,11 +218,11 @@ class PluginConfig:
 
     @property
     def owner_bili_mid(self) -> int:
-        return self._as_int("owner_bili_mid", 0)
+        return self._as_int("owner_bili_mid", 413116249)
 
     @property
     def self_bili_mid(self) -> int:
-        return self._as_int("self_bili_mid", 0)
+        return self._as_int("self_bili_mid", 3747575163260031)
 
     @property
     def feed_homepage(self) -> bool:
@@ -235,7 +235,7 @@ class PluginConfig:
 
     @property
     def bili_credential_file(self) -> str:
-        return str(self.get("bili_credential_file", "data/bili_whale/credentials.json"))
+        return str(self.get("bili_credential_file", "/opt/bili-ai/credentials.json"))
 
     @property
     def night_cron(self) -> str:
@@ -396,7 +396,7 @@ class PluginConfig:
 
     @property
     def data_dir(self) -> Path:
-        p = Path(str(self.get("diary_dir", "data/bili_whale")))
+        p = Path(str(self.get("diary_dir", "/opt/astrbot/data/bili_whale")))
         try:
             p.mkdir(parents=True, exist_ok=True)
         except Exception as e:
@@ -467,7 +467,7 @@ class PluginConfig:
 
     @property
     def watchui_token_file(self) -> Path:
-        return Path(str(self.get("watchui_token_file", "data/bili_whale/watchui_token.txt")))
+        return Path(str(self.get("watchui_token_file", "/opt/bili-watch-ui/token.txt")))
 
     @property
     def daily_push_enable(self) -> bool:
@@ -494,8 +494,12 @@ class PluginConfig:
 
     @property
     def dm_share_card_enable(self) -> bool:
-        """私信里分享视频时，发成 B站 那种视频卡片而不是网页链接。"""
-        return self._as_bool("dm_share_card_enable", True)
+        """私信里分享视频时，要不要先发一张封面图。
+
+        默认 False = 只发文字（标题 + 链接），点一下就能进视频；
+        发图虽然像卡片，但手机上点不开，主人还得自己去搜。
+        """
+        return self._as_bool("dm_share_card_enable", False)
 
     @property
     def dm_video_review(self) -> bool:
