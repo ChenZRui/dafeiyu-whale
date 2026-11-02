@@ -368,6 +368,36 @@
     "hint": "默认关。开了会主动找别的鱼的评论去聊，风险自负",
     "default": false
   },
+  "peer_hunt_enable": {
+    "type": "bool",
+    "description": "主动去评论区找别的鱼搭话",
+    "hint": "打开：她每轮在自己挑的视频热评里找昵称像「大肥鱼/小肥鱼/鲸鱼」的账号，主动回一句，不用等对方先 @ 她",
+    "default": true
+  },
+  "peer_hunt_probability": {
+    "type": "float",
+    "description": "每轮去搭话的概率",
+    "hint": "0~1，默认 0.5。太高就像刷屏，建议 0.3~0.6",
+    "default": 0.5
+  },
+  "peer_hunt_max": {
+    "type": "int",
+    "description": "每轮最多搭几位",
+    "hint": "默认 1，上限 3；也受 peer_daily_limit 总额度限制",
+    "default": 1
+  },
+  "peer_hunt_scan": {
+    "type": "int",
+    "description": "翻多少条热评去找",
+    "hint": "默认 20 条，上限 50",
+    "default": 20
+  },
+  "peer_hunt_min_like": {
+    "type": "int",
+    "description": "只搭点赞数≥这个值的评论",
+    "hint": "默认 0（不看点赞）；设成 3 之类可以只跟有热度的说话，避免像四处搭讪",
+    "default": 0
+  },
   "dm_auto_reply": {
     "type": "bool",
     "description": "私信双向：主人发 B站私信给她，她自动回",
@@ -506,6 +536,18 @@
     "description": "私信分享视频时先发一张封面图（关=只发标题+链接，手机上更好点开）",
     "hint": "默认关：只发一条「标题 + 链接 + 感想」的文字，手机上点一下就进 B站。打开会先发封面图（图点不开，还得自己搜）。",
     "default": false
+  },
+  "kaomoji_enable": {
+    "type": "bool",
+    "description": "评论/私信里带颜文字",
+    "hint": "默认开。颜文字由插件从固定池里挑（如 (ﾉ>ω<)ﾉ、(๑•̀ㅂ•́)و✧），不让模型自己乱写",
+    "default": true
+  },
+  "kaomoji_probability": {
+    "type": "float",
+    "description": "带颜文字的概率",
+    "hint": "0~1，默认 0.7；每条都带会腻，0.5~0.8 比较自然",
+    "default": 0.7
   },
   "dm_report_to_qq": {
     "type": "bool",

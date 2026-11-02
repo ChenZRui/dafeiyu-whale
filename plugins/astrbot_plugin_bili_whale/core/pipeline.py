@@ -18,7 +18,15 @@ from astrbot.api import logger
 
 from .bili import BiliClient, BiliError, strip_links
 from .config import PluginConfig
-from .peer import OWNER, PEER, STRANGER, classify, judge_by_llm, looks_suspicious
+from .peer import (
+    OWNER,
+    PEER,
+    STRANGER,
+    classify,
+    judge_by_llm,
+    keyword_hit,
+    looks_suspicious,
+)
 from .sender import QQSender
 from .store import StateStore
 
@@ -196,6 +204,15 @@ class WhalePipeline:
                     bili_share = {"ok": False, "error": str(e)}
             elif picked and not can_share:
                 bili_share = {"ok": False, "reason": "今日分享额度用完"}
+
+            # ⑥b 去这条视频的评论区找「别人家的鱼」搭两句话
+            if picked and self.cfg.peer_hunt_enable:
+                try:
+                    hunt = await self._peer_hunt(video or picked)
+                    if hunt.get("ok"):
+                        result["steps"].append(f"peer_hunt:{len(hunt.get('targets') or [])}")
+                except Exception as e:
+                    logger.debug(f"[bili-whale] 找同类搭话失败：{e}")
 
             # ⑦ 点赞
             if picked and self.cfg.like_enable:
@@ -748,6 +765,107 @@ class WhalePipeline:
             logger.info(f"[bili-whale] 投币被风控，已在 QQ 请主人代投 {bvid}")
         except Exception as e:
             logger.debug(f"[bili-whale] 请主人代投失败：{e}")
+
+    async def _peer_hunt(self, video: dict) -> dict[str, Any]:
+        """主动去这条视频的评论区找「别人家的鱼」搭话。
+
+        跟被 @ 才回不一样：这里是她在自己挑的视频下面翻热评，
+        看见昵称带「大肥鱼 / 肥鱼 / 鲸鱼」之类的账号（排除她自己和主人），
+        就上去回一句同类之间的闲话——不需要对方先跟她说话。
+        """
+        video = video if isinstance(video, dict) else {}
+        out: dict[str, Any] = {"ok": False, "targets": []}
+        if not self.cfg.peer_enable:
+            out["skipped"] = "同类互动开关关了"
+            return out
+        if not self.cfg.peer_hunt_enable:
+            out["skipped"] = "主动找同类搭话开关关了"
+            return out
+        if not video.get("bvid"):
+            out["skipped"] = "没有 bvid"
+            return out
+        left = self.store.peer_left(self.cfg.peer_daily_limit)
+        if left <= 0:
+            out["skipped"] = "今天的评论回复额度用完了"
+            return out
+        if random.random() > self.cfg.peer_hunt_probability:
+            out["skipped"] = f"按概率本轮不去搭话（{self.cfg.peer_hunt_probability}）"
+            return out
+
+        bvid = str(video.get("bvid") or "")
+        aid = int(video.get("aid") or 0)
+        title = str(video.get("title") or "")
+        self_mid = int(self.cfg.self_bili_mid or 0)
+        owner_mid = int(self.cfg.owner_bili_mid or 0)
+        try:
+            cmts = await self.bili.comments(bvid, aid=aid or None, limit=self.cfg.peer_hunt_scan)
+        except Exception as e:
+            out["skipped"] = f"取评论失败：{e}"
+            return out
+
+        cands: list[dict[str, Any]] = []
+        for c in cmts or []:
+            mid = int(c.get("mid") or 0)
+            rpid = int(c.get("rpid") or 0)
+            if not mid or not rpid or mid in (self_mid, owner_mid):
+                continue
+            if int(c.get("like") or 0) < self.cfg.peer_hunt_min_like:
+                continue
+            if not keyword_hit(c.get("uname") or "", c.get("text") or "", self.cfg.peer_keywords):
+                continue
+            if self.store.is_handled("peer", f"{bvid}:{rpid}"):
+                continue
+            cands.append(c)
+        if not cands:
+            out["skipped"] = f"这条下面没扫到别的鱼（看了 {len(cmts or [])} 条热评）"
+            logger.info(f"[bili-whale] 评论区没扫到同类 {bvid}（热评 {len(cmts or [])} 条）")
+            return out
+
+        cands.sort(key=lambda c: -int(c.get("like") or 0))
+        for c in cands[: self.cfg.peer_hunt_max]:
+            if self.store.peer_left(self.cfg.peer_daily_limit) <= 0:
+                break
+            uname = str(c.get("uname") or "")
+            rpid = int(c.get("rpid") or 0)
+            payload = {
+                "uname": uname,
+                "text": c.get("text") or "",
+                "title": title,
+                "bvid": bvid,
+                "root": rpid,
+            }
+            try:
+                txt = await self.llm.peer_chat_text(payload, turns=0)
+            except Exception as e:
+                logger.debug(f"[bili-whale] 给同类写话失败：{e}")
+                continue
+            if not txt:
+                continue
+            delay = self.cfg.reply_delay_sec
+            if delay:
+                await asyncio.sleep(random.randint(0, max(1, delay)))
+            try:
+                await self.bili.reply_to_comment(bvid=bvid, aid=aid, root=rpid, text=txt)
+            except Exception as e:
+                logger.warning(f"[bili-whale] 给同类回评论失败 {bvid}/{rpid}：{e}")
+                continue
+            self.store.peer_used(int(c.get("mid") or 0))
+            self.store.peer_bump(f"{bvid}:{rpid}", int(c.get("mid") or 0))
+            self.store.mark_handled("peer", f"{bvid}:{rpid}")
+            out["targets"].append({"uname": uname, "rpid": rpid, "text": txt})
+            logger.info(f"[bili-whale] 在评论区找同类搭话 {uname or rpid}：{txt[:40]}")
+
+        out["ok"] = bool(out["targets"])
+        if out["targets"]:
+            lines = [f"在《{title[:24]}》的评论区碰到别的鱼（{len(out['targets'])} 只）："]
+            for t in out["targets"]:
+                lines.append(f"· {t['uname'] or t['rpid']}｜我搭了句：{t['text'][:80]}")
+            lines.append(f"https://www.bilibili.com/video/{bvid}")
+            try:
+                await self.sender.send_friend("\n".join(lines))
+            except Exception as e:
+                logger.debug(f"[bili-whale] 汇报同类搭话失败：{e}")
+        return out
 
     async def _share_on_bili(self, video: dict, debrief: dict) -> dict:
         via = self.cfg.share_via

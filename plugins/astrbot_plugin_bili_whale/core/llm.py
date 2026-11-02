@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import json
+import random
 import re
 from typing import Any
 
@@ -30,6 +31,30 @@ _JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)```", re.S)
 # 调用方会自己加「@主人」，模型别抢着加
 _AT_PREFIX_RE = re.compile(r"^@\S+\s+")
 _SENT_END = "。！？!?…；;"
+
+# 颜文字池：不交给模型自己发明（它老是写出奇怪的半角括号或者干脆写 emoji），
+# 由代码在文案末尾补一个，保证稳定好看。
+_KAOMOJI = (
+    "(ﾉ>ω<)ﾉ",
+    "(๑•̀ㅂ•́)و✧",
+    "(´･ω･`)",
+    "(*/ω＼*)",
+    "(๑>؂<๑)",
+    "(｡･ω･｡)ﾉ♡",
+    "(ง •̀_•́)ง",
+    "(๑•́ ₃ •̀๑)",
+    "(´；ω；`)",
+    "(=^･ω･^=)",
+    "＼(≧▽≦)／",
+    "(´｡• ᵕ •｡`)",
+)
+
+# 已经有了就别再加第二个
+_KAO_RE = re.compile(r"[（(][^）)]{0,16}[)）]|[^\u4e00-\u9fff\s]{1,12}[ω▽≧≦ㅂㅅ]")
+
+
+def pick_kaomoji() -> str:
+    return random.choice(_KAOMOJI)
 
 
 # ============================================================
@@ -637,50 +662,87 @@ UP主：{up}
             return fallback
         return txt or fallback
 
+    def _maybe_kaomoji(self, text: str, *, p: float | None = None) -> str:
+        """按概率在末尾补一个颜文字（已经带了就不再补）。"""
+        out = (text or "").rstrip()
+        if not out:
+            return out
+        if not self.cfg.kaomoji_enable:
+            return out
+        try:
+            prob = self.cfg.kaomoji_probability if p is None else float(p)
+        except Exception:
+            prob = 0.7
+        if prob <= 0:
+            return out
+        if random.random() > prob:
+            return out
+        if _KAO_RE.search(out):
+            return out
+        if out.endswith(("。", "！", "？", "!", "?", "…", "~", "～")):
+            return f"{out} {pick_kaomoji()}"
+        return f"{out}。{pick_kaomoji()}"
+
     async def bili_share_text(self, video: dict, note: str, where: str) -> str:
-        """B站上的一条话：where=comment 是评论（≤120 字），where=dm 是私信（≤200 字）。"""
+        """B站上的一条话：where=comment 是评论（≤60 字），where=dm 是私信（≤160 字）。
+
+        这两条都是「跟主人说话」：开头叫他一声主人，用一两句说清发现了什么，
+        末尾由 `_maybe_kaomoji()` 补一个颜文字（模型自己写容易写崩，统一由代码加）。
+        """
         video = video if isinstance(video, dict) else {}
         mode = "dm" if str(where or "").strip().lower() == "dm" else "comment"
-        limit = 200 if mode == "dm" else 120
+        limit = 160 if mode == "dm" else 60
         title = _one_line(video.get("title"), 60)
         point = _one_line(note, 120)
 
         if mode == "dm":
             rule = """你在给主人发一条 B站 私信，是私房话，不是推荐报告。"""
-            prompt = f"""我挑中了这条，想单独私信推荐给主人。
+            prompt = f"""我挑中了这条，想单独私信甩给主人。
 
 视频：{title}
 UP主：{_one_line(video.get('up'), 20)}
 我自己的看法：{point or '（还没写出来）'}
 链接：{_video_link(video)}
 
-写一条私信正文，200 字以内：先说为什么挑这条，再说一句我自己的话，最后提一句「你看不看」。
-口语，像两个人说话；不要写 @主人（调用方会加）；不要 emoji；不要链接（系统会单独带）。"""
+写一条私信正文，160 字以内，格式照这个感觉来：
+「主人，我发现……（一句话说这条好在哪），你看不看」
+
+要求：
+1. 开头必须叫「主人，」，像顺手拍他一下；
+2. 说清「我发现了什么」，别写「我觉得不错」这种空话；
+3. 口语、可爱一点，不要客套、不要 emoji、不要颜文字（系统会补）、不要链接（系统会单独带）、不要写 @主人；
+只输出正文。"""
             fallback = _clip_one_line(
-                f"主人，这条《{title}》我看了，{point or '有点意思'}。你抽空看一眼？", limit
+                f"主人，我发现这条《{title}》挺对味，{point or '你看不看'}。", limit
             )
         else:
-            rule = """你在 B站评论区回一条话，是群友聊天，不是推荐文案。"""
-            prompt = f"""我准备在 B站 评论区推荐这条视频，主人在那条评论里。
+            rule = """你在 B站评论区跟主人说话，像群友随口喊他一声，不是推荐文案。"""
+            prompt = f"""我准备在 B站 评论区把这条视频甩给主人，主人在那条评论里。
 
 视频：{title}
 UP主：{_one_line(video.get('up'), 20)}
 我自己的看法：{point or '（还没写出来）'}
 
-写一条评论正文，120 字以内：像群友随口说话，先说这条哪里好看/哪里值得看，再带一点我自己的吐槽或态度。
-不要写 @主人（调用方会加）；不要 emoji；不要链接；不要「推荐大家看」这种模板腔。"""
-            fallback = _clip_one_line(f"这条《{title}》有点东西，{point or '自己看吧'}", limit)
+写一条评论正文，**60 字以内**，格式照这个感觉来：
+「主人，发现一个 XXX 诶」或「主人，这条你得看，XXX」
+
+要求：
+1. 开头必须叫「主人，」，短、快、像顺口喊他；
+2. 一句话说清「我发现了什么坑/好东西」，带一点我自己的态度或吐槽；
+3. 不要写 @主人（系统会加）、不要 emoji、不要颜文字（系统会补）、不要链接、不要「推荐大家看」这种模板腔；
+只输出正文。"""
+            fallback = _clip_one_line(f"主人，发现一条《{title}》挺对我胃口。", limit)
 
         try:
             raw = await self._complete(self._system(rule), prompt)
             out = _one_line(_clean(raw), 0)
             if not out:
-                return fallback
+                return self._maybe_kaomoji(fallback)
             out = _AT_PREFIX_RE.sub("", out).strip()
-            return _clip_one_line(out, limit) or fallback
+            return self._maybe_kaomoji(_clip_one_line(out, limit) or fallback)
         except Exception as e:
             logger.warning(f"[bili-whale] 生成 B站 {mode} 文案失败，用兜底：{e}")
-            return fallback
+            return self._maybe_kaomoji(fallback)
 
     async def qq_share_text(self, video: dict, debrief: dict, letter: str) -> str:
         """给主人的 QQ 分享文案：钩子 + 细节 + 自己的点评 + 链接，长度受配置限制。"""
@@ -869,7 +931,7 @@ UP主：{_one_line(video.get('up'), 20)}
         try:
             raw = await self._complete(self._system(rule), prompt)
             out = _AT_PREFIX_RE.sub("", _one_line(_clean(raw), 0)).strip()
-            return _clip_one_line(out, limit) or fallback
+            return self._maybe_kaomoji(_clip_one_line(out, limit) or fallback, p=0.5)
         except Exception as e:
             logger.warning(f"[bili-whale] 生成同类回复失败，用兜底：{e}")
-            return fallback
+            return self._maybe_kaomoji(fallback, p=0.5)

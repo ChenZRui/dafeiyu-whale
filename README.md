@@ -318,6 +318,21 @@ plugin.context.persona_manager.invalidate_persona_cache()   # 改完人格立刻
 | `like_enable` | `true` | 点赞 |
 | `fav_enable` / `fav_min_score` | `true` / `15` | 收藏，以及多少分以上才收藏 |
 | `coin_enable` / `coin_daily_max` / `coin_min_stars` | `true` / `1` / `1` | 每天给「你打星最高」的那条投币 |
+| `kaomoji_enable` / `kaomoji_probability` | `true` / `0.7` | 评论/私信末尾带颜文字（从固定池里挑，不让模型自己乱写） |
+
+### 别的鱼（别人家的同类 bot）
+| 键 | 默认 | 说明 |
+| --- | --- | --- |
+| `peer_enable` | `true` | 认「别的鱼」并和它聊天（被 @ / 被回复时） |
+| `peer_keywords` | `["大肥鱼","肥鱼","鲸鱼","小鲸鱼","whale"]` | 昵称命中就算同类的关键词 |
+| `peer_llm_judge` | `true` | 没命中关键词时，要不要再让模型判一次 |
+| `peer_daily_limit` | `6` | 每天最多回多少条（评论互动总额度） |
+| `peer_thread_max_turns` | `6` | 同一条楼层最多聊几轮，防止俩人无限对线 |
+| `peer_hunt_enable` | `true` | **主动**去评论区找别的鱼搭话（不用等对方先说话） |
+| `peer_hunt_probability` | `0.5` | 每轮去搭话的概率 |
+| `peer_hunt_max` | `1` | 每轮最多搭几位（上限 3） |
+| `peer_hunt_scan` | `20` | 翻多少条热评去找（上限 50） |
+| `peer_hunt_min_like` | `0` | 只跟点赞数≥这个值的评论说话，避免像四处搭讪 |
 
 ### 收件箱 / 私信
 | 键 | 默认 | 说明 |
@@ -442,6 +457,29 @@ core/
 
 面板插件是这套东西的「面板形态」——数据源仍然是本仓库里的 `astrbot_plugin_bili_whale`
 和 `astrbot_plugin_whale_journal`，两者共用同一份 `state.json` 和 `entries.jsonl`，装哪个都不冲突。
+
+### v1.2.3（2026-11-02）
+
+评论区开始「说人话」+ 会自己去找别的鱼：
+
+- **颜文字**：评论和私信末尾按概率补一个颜文字（`(ﾉ>ω<)ﾉ` `(๑•̀ㅂ•́)و✧` 这种），
+  从插件内置的 12 个里随机挑。不让模型自己写——它写出来的半角括号经常歪掉，
+  而且有些模型会直接甩 emoji（B站 评论区会显示成方块）。开关 `kaomoji_enable` /
+  概率 `kaomoji_probability`（默认 0.7）。
+- **文案变短**：评论从「120 字推荐文案」改成 **60 字以内的搭话**，开头必须叫「主人，」，
+  像「主人，这条你得看，router 先拦杂事只留决策那下」。私信同理（160 字以内）。
+  实测输出：
+  > @六成因 主人，这条你得看，router 那套我懂，关键还是主人的注意力不够分（๑•̀ㅂ•́)و✧
+- **主动去鱼群搭话**：以前只有别人 @ 她、或者回复她，她才会认亲。
+  现在每轮挑完视频后，她会翻这条视频的 20 条热评，找昵称带「大肥鱼 / 小肥鱼 / 鲸鱼 / whale」
+  的账号（排除她自己和主人），主动回一句——就像图里那些小肥鱼互相接话那样。
+  配额共用 `peer_daily_limit`，每轮最多 1 只、概率 0.5，已经搭过的不重复搭。
+  实测在《DeepSeek 开源 Super-agent》那条下面一次就扫到 4 只同类
+  （翠绿甘松的大肥鱼 / 大肥鱼会刷视频 / 深蓝的小肥鱼 / 大肥鱼言言）。
+- 新配置 7 个：`kaomoji_enable`、`kaomoji_probability`、`peer_hunt_enable`、
+  `peer_hunt_probability`、`peer_hunt_max`、`peer_hunt_scan`、`peer_hunt_min_like`。
+- 单测 `_test_hunt.py` 38 项全过（颜文字不重复补、排除自己/主人、已搭过跳过、额度、概率、
+  点赞门槛、QQ 汇报），原有 5 个测试文件也全过。
 
 ### v1.2.2（2026-11-01）
 

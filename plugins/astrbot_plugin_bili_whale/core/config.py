@@ -91,6 +91,15 @@ DEFAULTS: dict[str, Any] = {
     "peer_daily_limit": 6,
     "peer_thread_max_turns": 6,
     "peer_proactive": False,
+    # ---- 主动去评论区找别的鱼搭话（不是等她被 @）----
+    "peer_hunt_enable": True,
+    "peer_hunt_probability": 0.5,
+    "peer_hunt_max": 1,
+    "peer_hunt_scan": 20,
+    "peer_hunt_min_like": 0,
+    # ---- 颜文字：评论/私信里带一点，像人不像机器人 ----
+    "kaomoji_enable": True,
+    "kaomoji_probability": 0.7,
     # ---- 私信双向 ----
     "dm_auto_reply": True,
     "dm_reply_stranger": False,
@@ -557,6 +566,44 @@ class PluginConfig:
     @property
     def peer_proactive(self) -> bool:
         return self._as_bool("peer_proactive", False)
+
+    @property
+    def peer_hunt_enable(self) -> bool:
+        """要不要主动去评论区找别人家的鱼搭话（不只是在被 @ 时才回）。"""
+        return self._as_bool("peer_hunt_enable", True)
+
+    @property
+    def peer_hunt_probability(self) -> float:
+        try:
+            v = float(self.get("peer_hunt_probability", 0.5))
+        except (TypeError, ValueError):
+            v = 0.5
+        return max(0.0, min(1.0, v))
+
+    @property
+    def peer_hunt_max(self) -> int:
+        return max(0, min(3, self._as_int("peer_hunt_max", 1)))
+
+    @property
+    def peer_hunt_scan(self) -> int:
+        return max(5, min(50, self._as_int("peer_hunt_scan", 20)))
+
+    @property
+    def peer_hunt_min_like(self) -> int:
+        return max(0, self._as_int("peer_hunt_min_like", 0))
+
+    # ---------- 颜文字 ----------
+    @property
+    def kaomoji_enable(self) -> bool:
+        return self._as_bool("kaomoji_enable", True)
+
+    @property
+    def kaomoji_probability(self) -> float:
+        try:
+            v = float(self.get("kaomoji_probability", 0.7))
+        except (TypeError, ValueError):
+            v = 0.7
+        return max(0.0, min(1.0, v))
 
     # ---------- 私信双向 ----------
     @property
