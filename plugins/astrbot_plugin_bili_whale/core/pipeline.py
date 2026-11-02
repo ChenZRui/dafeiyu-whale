@@ -811,7 +811,9 @@ class WhalePipeline:
                 continue
             if int(c.get("like") or 0) < self.cfg.peer_hunt_min_like:
                 continue
-            if not keyword_hit(c.get("uname") or "", c.get("text") or "", self.cfg.peer_keywords):
+            # 只看昵称：评论区里别人提到「大肥鱼」三个字很常见（比如在说我们），
+            # 用正文关键词筛会把一堆路人当成同类，主动搭话就又尬又像骚扰。
+            if not keyword_hit(c.get("uname") or "", "", self.cfg.peer_keywords):
                 continue
             if self.store.is_handled("peer", f"{bvid}:{rpid}"):
                 continue
