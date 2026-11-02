@@ -733,16 +733,20 @@ UP主：{_one_line(video.get('up'), 20)}
 只输出正文。"""
             fallback = _clip_one_line(f"主人，发现一条《{title}》挺对我胃口。", limit)
 
+        # 评论区那条是「甩给主人看」的，每次都要带一个颜文字（图里别人家的鱼也是条条都带）；
+        # 私信按配置的概率来，不然天天一个样。
+        kao_p = 1.0 if mode == "comment" else None
+
         try:
             raw = await self._complete(self._system(rule), prompt)
             out = _one_line(_clean(raw), 0)
             if not out:
-                return self._maybe_kaomoji(fallback)
+                return self._maybe_kaomoji(fallback, p=kao_p)
             out = _AT_PREFIX_RE.sub("", out).strip()
-            return self._maybe_kaomoji(_clip_one_line(out, limit) or fallback)
+            return self._maybe_kaomoji(_clip_one_line(out, limit) or fallback, p=kao_p)
         except Exception as e:
             logger.warning(f"[bili-whale] 生成 B站 {mode} 文案失败，用兜底：{e}")
-            return self._maybe_kaomoji(fallback)
+            return self._maybe_kaomoji(fallback, p=kao_p)
 
     async def qq_share_text(self, video: dict, debrief: dict, letter: str) -> str:
         """给主人的 QQ 分享文案：钩子 + 细节 + 自己的点评 + 链接，长度受配置限制。"""
