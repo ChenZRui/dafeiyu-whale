@@ -249,6 +249,12 @@
     "description": "在QQ私聊把细节讲给主人",
     "default": true
   },
+  "qq_push_mode": {
+    "type": "string",
+    "default": "each",
+    "description": "QQ 推送方式",
+    "hint": "each=每轮刷到就单独推一条；digest=白天不打扰，攒到晚上 21:00 连打分链接一起发一封汇总"
+  },
   "qq_share_max_chars": {
     "type": "int",
     "description": "QQ 分享文案最长字数",

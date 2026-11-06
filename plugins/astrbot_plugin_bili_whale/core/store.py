@@ -43,7 +43,9 @@ class StateStore:
             "last_unread": {},
             "peer": {"date": "", "count": 0, "threads": {}},
             "feedback": {},  # bvid -> {"stars": 1-5, "note": "主人说的话", "ts": int}
-            "last_list": [],  # 上一次 /观看历史 发出去的 bvid 顺序，给 /打分 用序号
+            "last_list": [],
+            # digest 模式：白天刷到的不单独推 QQ，攒在这里等晚上 21:00 一起发
+            "digest": {"date": "", "items": []},  # 上一次 /观看历史 发出去的 bvid 顺序，给 /打分 用序号
         }
 
     def _load(self) -> dict[str, Any]:
@@ -380,6 +382,36 @@ class StateStore:
 
     def share_quota_left(self, quota: int) -> int:
         return max(0, int(quota) - self.shares_today())
+
+    # ------------------------------------------------------------ 每晚汇总（digest）
+    def _digest(self) -> dict[str, Any]:
+        d = self.data.get("digest")
+        if not isinstance(d, dict):
+            d = {"date": "", "items": []}
+            self.data["digest"] = d
+        if not isinstance(d.get("items"), list):
+            d["items"] = []
+        if d.get("date") != self._today():
+            d["date"] = self._today()
+            d["items"] = []
+        return d
+
+    def add_digest(self, item: dict[str, Any]) -> int:
+        """攒一条今天想推的视频，返回今天累计条数。"""
+        d = self._digest()
+        bvid = str(item.get("bvid") or "")
+        d["items"] = [i for i in d["items"] if str(i.get("bvid") or "") != bvid]
+        d["items"].append(item)
+        self.save()
+        return len(d["items"])
+
+    def digest_today(self) -> list[dict[str, Any]]:
+        return list(self._digest().get("items") or [])
+
+    def clear_digest(self) -> None:
+        d = self._digest()
+        d["items"] = []
+        self.save()
 
     # ------------------------------------------------------------ 互动去重
     def is_handled(self, kind: str, key: str | int) -> bool:

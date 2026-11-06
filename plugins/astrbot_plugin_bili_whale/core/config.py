@@ -62,6 +62,8 @@ DEFAULTS: dict[str, Any] = {
     "dislike_topics": ["带货", "擦边", "标题党", "纯搬运", "鬼畜"],
     "share_daily_quota": 3,
     "qq_share_enable": True,
+    # each = 每轮刷到就单独推一条；digest = 白天不打扰，攒到晚上 21:00 一起发一封
+    "qq_push_mode": "each",
     "qq_share_max_chars": 800,
     "diary_enable": True,
     "diary_dir": "/opt/astrbot/data/bili_whale",
@@ -394,6 +396,12 @@ class PluginConfig:
     @property
     def qq_share_enable(self) -> bool:
         return self._as_bool("qq_share_enable", True)
+
+    @property
+    def qq_push_mode(self) -> str:
+        """each=每轮单独推；digest=白天不推，晚上 21:00 汇总一封。"""
+        raw = str(self.get("qq_push_mode", "each") or "each").strip().lower()
+        return raw if raw in ("each", "digest") else "each"
 
     @property
     def qq_share_max_chars(self) -> int:

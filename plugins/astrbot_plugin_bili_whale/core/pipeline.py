@@ -339,6 +339,33 @@ class WhalePipeline:
         except Exception as e:
             logger.warning(f"[bili-whale] 回写打分台评分失败：{e}")
 
+    async def _send_digest(self) -> int:
+        """把白天攒下的视频一次性汇总发出去（digest 模式），返回条数。"""
+        items = self.store.digest_today()
+        if not items:
+            return 0
+        lines = [f"主人，今天挑了 {len(items)} 条给你："]
+        for i, it in enumerate(items[:12], 1):
+            title = str(it.get("title") or "").strip()
+            url = str(it.get("url") or "").strip()
+            score = it.get("score")
+            lines.append("")
+            lines.append(f"{i}. {title}")
+            if score:
+                lines.append(f"（她给 {score} 分）")
+            note = str(it.get("note") or "").strip()
+            if note:
+                lines.append(f"她说的：{note}")
+            if url:
+                lines.append(url)
+        ok = await self.sender.send_friend("\n".join(lines))
+        logger.info(
+            f"[bili-whale] 每日汇总已推送 {len(items)} 条（{'成功' if ok else '失败'}）"
+        )
+        if ok:
+            self.store.clear_digest()
+        return len(items)
+
     async def push_watch_report(self, *, force: bool = False) -> dict:
         """每天 21:00 给主人发「手机能直接打开的打分链接」，并（可选）附离线 HTML。
 
@@ -358,6 +385,7 @@ class WhalePipeline:
         favs = len(self.store.fav_set())
         today = sum(1 for i in rows if str(i.get("date") or "") == time.strftime("%Y-%m-%d"))
         phone = self._public_watch_url(tk)
+        digest_n = await self._send_digest()
         sent_link = False
         if self.cfg.daily_push_link and phone:
             head = (
@@ -953,7 +981,29 @@ class WhalePipeline:
         letter = getattr(entry, "letter", "") if entry else ""
 
         # ① 视频分享（私聊 + 群）
-        if picked:
+        if picked and self.cfg.qq_push_mode == "digest":
+            # 白天不打扰：攒起来，晚上 21:00 连打分链接一起发一封汇总。
+            # 「她说的一句」直接复用 B站评论文案 / 短评，不多花一次 LLM。
+            note = ""
+            c = (bili_share.get("comment") or {}).get("text") or ""
+            if c:
+                note = str(c).strip()[:120]
+            elif debrief.get("note"):
+                note = str(debrief["note"]).strip()[:120]
+            n = self.store.add_digest(
+                {
+                    "bvid": (video or picked).get("bvid") or picked.get("bvid") or "",
+                    "title": (video or picked).get("title") or "",
+                    "url": (video or picked).get("url") or "",
+                    "score": int(
+                        (video or picked).get("score") or debrief.get("score") or 0
+                    ),
+                    "ts": int(time.time()),
+                    "note": note,
+                }
+            )
+            logger.info(f"[bili-whale] 汇总模式：今天已攒 {n} 条（21:00 一起发）")
+        elif picked:
             try:
                 text = await self.llm.qq_share_text(video or picked, debrief or {}, letter)
             except Exception as e:
