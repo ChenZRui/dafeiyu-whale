@@ -255,6 +255,12 @@
     "description": "QQ 推送方式",
     "hint": "each=每轮刷到就单独推一条；digest=白天不打扰，攒到晚上 21:00 连打分链接一起发一封汇总"
   },
+  "qq_daily_max": {
+    "type": "int",
+    "default": 2,
+    "description": "每天最多推几条视频到 QQ",
+    "hint": "超过这个数就不再往 QQ 推（视频仍然看、仍然进打分台）"
+  },
   "qq_share_max_chars": {
     "type": "int",
     "description": "QQ 分享文案最长字数",

@@ -96,6 +96,7 @@ def make_pipe(mode):
     p.cfg = types.SimpleNamespace(
         qq_share_enable=True,
         qq_push_mode=mode,
+        qq_daily_max=2,
         owner_qq=2675150339,
         group_share_enable=False,
         group_ids=[],
@@ -154,7 +155,18 @@ async def main():
     p2.llm.qq_share_text = _qq
     done2 = await p2._report_qq(picked, picked, {"note": "n"}, {"comment": {"ok": True}}, None)
     check("each 模式仍私聊", len(done2) == 1, done2)
-    check("each 模式不攒", p2.store.digest_today() == [])
+    _e = p2.store.digest_today()
+    check("each 模式也记一笔（只用来算额度）", len(_e) == 1 and _e[0].get("pushed") is True, _e)
+
+    # 额度：qq_daily_max=2，第三条不再推
+    p3 = make_pipe("digest")
+    for i in range(2):
+        v = {"bvid": f"BV1x{i}", "title": f"T{i}", "url": f"u{i}", "score": 18}
+        await p3._report_qq(v, v, {}, {}, None)
+    check("攒满 2 条", len(p3.store.digest_today()) == 2, p3.store.digest_today())
+    v3 = {"bvid": "BV1x9", "title": "T9", "url": "u9", "score": 18}
+    await p3._report_qq(v3, v3, {}, {}, None)
+    check("超过额度不再攒", len(p3.store.digest_today()) == 2, len(p3.store.digest_today()))
 
     print(f"\n{ok} 通过 / {bad} 失败")
     return bad == 0

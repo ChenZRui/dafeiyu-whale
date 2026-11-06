@@ -64,6 +64,8 @@ DEFAULTS: dict[str, Any] = {
     "qq_share_enable": True,
     # each = 每轮刷到就单独推一条；digest = 白天不打扰，攒到晚上 21:00 一起发一封
     "qq_push_mode": "each",
+    # 一天最多往 QQ 推几条视频（两种模式都算），防止 B站 分享失败时刷屏
+    "qq_daily_max": 2,
     "qq_share_max_chars": 800,
     "diary_enable": True,
     "diary_dir": "/opt/astrbot/data/bili_whale",
@@ -396,6 +398,11 @@ class PluginConfig:
     @property
     def qq_share_enable(self) -> bool:
         return self._as_bool("qq_share_enable", True)
+
+    @property
+    def qq_daily_max(self) -> int:
+        """一天最多推几条视频到 QQ（each/digest 都算这个额度）。"""
+        return max(0, self._as_int("qq_daily_max", 2))
 
     @property
     def qq_push_mode(self) -> str:

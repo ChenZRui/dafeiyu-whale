@@ -341,7 +341,7 @@ class WhalePipeline:
 
     async def _send_digest(self) -> int:
         """把白天攒下的视频一次性汇总发出去（digest 模式），返回条数。"""
-        items = self.store.digest_today()
+        items = [i for i in self.store.digest_today() if not i.get("pushed")]
         if not items:
             return 0
         lines = [f"主人，今天挑了 {len(items)} 条给你："]
@@ -981,8 +981,16 @@ class WhalePipeline:
         letter = getattr(entry, "letter", "") if entry else ""
 
         # ① 视频分享（私聊 + 群）
+        # 每天的 QQ 推送额度：不管哪种模式，一天最多推 qq_daily_max 条，
+        # 免得 B站 那边分享失败（没记到 shares 里）时 QQ 一直刷。
+        cap = int(self.cfg.qq_daily_max or 0)
+        if picked and cap and len(self.store.digest_today()) >= cap:
+            logger.info(
+                f"[bili-whale] 今天的 QQ 推送额度（{cap} 条）已经用完，这条只进打分台"
+            )
+            picked = None
         if picked and self.cfg.qq_push_mode == "digest":
-            # 白天不打扰：攒起来，晚上 21:00 连打分链接一起发一封汇总。
+            # 白天不打扰：攒起来，晚上 22:05 连打分链接一起发一封汇总。
             # 「她说的一句」直接复用 B站评论文案 / 短评，不多花一次 LLM。
             note = ""
             c = (bili_share.get("comment") or {}).get("text") or ""
@@ -1002,7 +1010,7 @@ class WhalePipeline:
                     "note": note,
                 }
             )
-            logger.info(f"[bili-whale] 汇总模式：今天已攒 {n} 条（21:00 一起发）")
+            logger.info(f"[bili-whale] 汇总模式：今天已攒 {n} 条（22:05 一起发）")
         elif picked:
             try:
                 text = await self.llm.qq_share_text(video or picked, debrief or {}, letter)
@@ -1026,6 +1034,20 @@ class WhalePipeline:
                     extra = f"\n（B站那边没发出去：{raw[:100]}）"
             if await self.sender.send_friend(f"{text}{extra}", images):
                 done.append(self.sender.umo_friend(self.cfg.owner_qq))
+                # each 模式也记一笔，用来扣当天的推送额度
+                self.store.add_digest(
+                    {
+                        "bvid": (video or picked).get("bvid")
+                        or picked.get("bvid")
+                        or "",
+                        "title": (video or picked).get("title") or "",
+                        "url": (video or picked).get("url") or "",
+                        "score": int((video or picked).get("score") or 0),
+                        "ts": int(time.time()),
+                        "note": str(text or "")[:120],
+                        "pushed": True,
+                    }
+                )
 
             # 群：短一点，不要刷屏
             if self.cfg.group_share_enable and self.cfg.group_ids:
